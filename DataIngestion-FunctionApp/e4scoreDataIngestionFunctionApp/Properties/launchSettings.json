@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "e4scoreDataIngestionFunctionApp": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7054",
+      "launchBrowser": false
+    }
+  }
+}

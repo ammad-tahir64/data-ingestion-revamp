@@ -27,8 +27,10 @@ GROUP BY i.name, i.type_desc, i.is_unique
 ORDER BY i.name;
 
 -- 2. Verify new index sizes
--- Expected: Total size significantly smaller than pre-check baseline
--- The 4 dropped indexes together represented an estimated 1–1.5 TB of additional storage.
+-- Expected: Total size significantly smaller than pre-check baseline.
+-- The 3 dropped indexes accounted for ~13 GB (6.40 + 5.79 + 0.78 GB) of additional storage.
+-- After dropping them and adding the small new index, total index storage should drop
+-- from ~33 GB to ~20 GB or less.
 PRINT '=== Index Sizes After Changes (compare with pre-check) ==='
 SELECT 
     i.name AS IndexName,
@@ -47,7 +49,6 @@ SELECT name FROM sys.indexes
 WHERE object_id = OBJECT_ID('DeviceSummaries')
   AND name IN (
     'IX_DeviceSummaries_DeviceId',
-    'nci_msft_DeviceSummaries_BC08984D5BACAEE1C87569072C4FECC0',
     'nci_wi_DeviceSummaries_DDD72ECE7AF305F90C5D1276C40FA2C6',
     'nci_wi_DeviceSummaries_B3EAFC8EB862D751B8E12B44239366B1'
   );

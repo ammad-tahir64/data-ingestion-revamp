@@ -14,7 +14,7 @@
 -- cleaned up. Dropping it will reduce per-ping write amplification by ~15%.
 PRINT 'Dropping IX_DeviceSummaries_DeviceId (26 columns)...'
 IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_DeviceSummaries_DeviceId' AND object_id = OBJECT_ID('DeviceSummaries'))
-    DROP INDEX IX_DeviceSummaries_DeviceId ON DeviceSummaries WITH (ONLINE = ON);
+    DROP INDEX IX_DeviceSummaries_DeviceId ON DeviceSummaries;
 PRINT 'Done.'
 GO
 
@@ -25,7 +25,7 @@ GO
 -- are now covered by the retained indexes and the new optimized index.
 PRINT 'Dropping nci_wi_DeviceSummaries_DDD72ECE7AF305F90C5D1276C40FA2C6 (20 columns)...'
 IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'nci_wi_DeviceSummaries_DDD72ECE7AF305F90C5D1276C40FA2C6' AND object_id = OBJECT_ID('DeviceSummaries'))
-    DROP INDEX nci_wi_DeviceSummaries_DDD72ECE7AF305F90C5D1276C40FA2C6 ON DeviceSummaries WITH (ONLINE = ON);
+    DROP INDEX nci_wi_DeviceSummaries_DDD72ECE7AF305F90C5D1276C40FA2C6 ON DeviceSummaries;
 PRINT 'Done.'
 GO
 
@@ -36,7 +36,7 @@ GO
 -- key to leverage; the clustered PK is sufficient for such ad-hoc lookups.
 PRINT 'Dropping nci_wi_DeviceSummaries_B3EAFC8EB862D751B8E12B44239366B1 (ExcursionTimeRunning only)...'
 IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'nci_wi_DeviceSummaries_B3EAFC8EB862D751B8E12B44239366B1' AND object_id = OBJECT_ID('DeviceSummaries'))
-    DROP INDEX nci_wi_DeviceSummaries_B3EAFC8EB862D751B8E12B44239366B1 ON DeviceSummaries WITH (ONLINE = ON);
+    DROP INDEX nci_wi_DeviceSummaries_B3EAFC8EB862D751B8E12B44239366B1 ON DeviceSummaries;
 PRINT 'Done.'
 GO
 

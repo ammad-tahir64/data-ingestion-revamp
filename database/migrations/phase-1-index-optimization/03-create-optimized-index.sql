@@ -1,7 +1,12 @@
 -- =====================================================
 -- Phase 1, Step 3: Create Optimized Index
 -- Run AFTER: 02-drop-bloated-indexes.sql
--- Expected duration: ~30-60 minutes (building on 23.6M rows)
+-- Expected duration: ~30-90 minutes (building on 23.6M rows)
+--   NOTE: If the 3 bloated indexes were NOT successfully dropped before this step
+--   (e.g. the first run hit error 3745 from ONLINE = ON on non-clustered DROPs),
+--   the build will take longer because SQL Server must still maintain all the old
+--   bloated indexes for every row ingested during the build. Re-run 02-drop-bloated-indexes.sql
+--   first, then re-run this step for the fastest build time.
 -- Risk: LOW — ONLINE = ON means no blocking during build
 -- This replaces ALL 4 dropped indexes for the actual query patterns
 -- =====================================================
@@ -13,7 +18,7 @@
 -- =====================================================
 
 PRINT 'Creating IX_DeviceSummaries_IMEI_TimeStamp_IsMove...'
-PRINT 'This will take 30-60 minutes on 23.6M rows. Do NOT cancel.'
+PRINT 'This will take 30-90 minutes on 23.6M rows. Do NOT cancel.'
 
 CREATE NONCLUSTERED INDEX IX_DeviceSummaries_IMEI_TimeStamp_IsMove
 ON [dbo].[DeviceSummaries] ([IMEI], [TimeStamp] DESC)

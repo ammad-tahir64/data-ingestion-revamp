@@ -14,7 +14,7 @@
 -- Step 1: Drop the new optimized index created in Phase 1 (if it exists)
 PRINT 'Removing new optimized index created in Phase 1...'
 IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_DeviceSummaries_IMEI_TimeStamp_IsMove' AND object_id = OBJECT_ID('DeviceSummaries'))
-    DROP INDEX IX_DeviceSummaries_IMEI_TimeStamp_IsMove ON DeviceSummaries WITH (ONLINE = ON);
+    DROP INDEX IX_DeviceSummaries_IMEI_TimeStamp_IsMove ON DeviceSummaries;
 PRINT 'Done.'
 GO
 

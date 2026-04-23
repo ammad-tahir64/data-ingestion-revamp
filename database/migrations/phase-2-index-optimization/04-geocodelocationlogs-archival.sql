@@ -87,13 +87,19 @@ AS
 --           then delete them from the live table.
 -- Usage   : EXEC usp_ArchiveGeocodeLocationLogs @RetentionDays = 90;
 -- Schedule: Daily SQL Agent job, off-peak hours.
+--
+-- ACTION REQUIRED — replace <date_column> placeholder (3 occurrences):
+--   Line 1: INSERT ... WHERE src.[<date_column>] < @CutoffDate
+--   Line 2: DELETE ... WHERE [<date_column>] < @CutoffDate
+--   Line 3: AND WHERE [<date_column>] < @CutoffDate  (archive correl. subquery)
+--
+--   Replace <date_column> with the actual timestamp column name found in
+--   Section 6e of the Phase 2A diagnostics.
+--   Common names: CreatedDate, LogDate, EventDate, Timestamp, CreatedAt.
+--   Search this file for '<date_column>' to locate all three occurrences.
 -- =====================================================
 BEGIN
     SET NOCOUNT ON;
-
-    -- ACTION REQUIRED: Replace [<date_column>] with the actual timestamp
-    -- column name found in Section 6e of the Phase 2A diagnostics.
-    -- Example: [CreatedDate], [LogDate], [EventDate], [Timestamp]
 
     DECLARE @CutoffDate  DATETIME2 = DATEADD(DAY, -@RetentionDays, SYSUTCDATETIME());
     DECLARE @RowsMoved   INT       = 0;
@@ -108,23 +114,27 @@ BEGIN
     BEGIN
         BEGIN TRANSACTION;
 
-        -- Move the next batch to the archive table
+        -- Line 1: Replace <date_column> with the actual column name
         INSERT INTO [dbo].[GeocodeLocationLogs_Archive]
         SELECT TOP (@BatchSize) src.*
         FROM [dbo].[GeocodeLocationLogs] src WITH (UPDLOCK, READPAST)
-        -- Replace <date_column> with the actual column name:
         WHERE src.[<date_column>] < @CutoffDate;
 
         SET @RowsMoved = @@ROWCOUNT;
 
-        -- Delete the same rows from the live table
+        -- Line 2 & 3: Replace <date_column> with the actual column name.
+        -- The 10-second window in the ArchivedAt filter ensures the DELETE
+        -- only removes rows that were inserted into the archive table during
+        -- THIS batch (i.e. within the same transaction).  This prevents the
+        -- DELETE from touching rows archived in a previous batch that happen
+        -- to share the same date-range predicate, protecting against any
+        -- partial re-run scenario where the INSERT committed but the DELETE
+        -- did not (e.g. a timeout between the two statements).
         DELETE FROM [dbo].[GeocodeLocationLogs]
-        -- Replace <date_column> with the actual column name:
         WHERE [<date_column>] < @CutoffDate
           AND [Id] IN (
                 SELECT [Id]
                 FROM [dbo].[GeocodeLocationLogs_Archive]
-                -- Replace <date_column> with the actual column name:
                 WHERE [<date_column>] < @CutoffDate
                   AND [ArchivedAt] >= DATEADD(SECOND, -10, SYSUTCDATETIME())
               );

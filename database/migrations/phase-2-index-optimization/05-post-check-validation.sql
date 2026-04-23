@@ -12,7 +12,7 @@
 -- =====================================================
 -- 1. Index state — DeviceEvents
 -- Expected: No bloated indexes remain; only the PK and the new
--- IX_DeviceEvents_IMEI_EventDate are present.
+-- IX_DeviceEvents_IMEI_TimeStamp are present.
 -- =====================================================
 PRINT '=== DeviceEvents: Indexes After Changes (compare with pre-check) ==='
 SELECT
@@ -62,7 +62,7 @@ PRINT '=== DeviceEvents: Confirm New Optimized Index (expect 1 row) ==='
 SELECT name, type_desc
 FROM sys.indexes
 WHERE object_id = OBJECT_ID('DeviceEvents')
-  AND name = 'IX_DeviceEvents_IMEI_EventDate';
+  AND name = 'IX_DeviceEvents_IMEI_TimeStamp';
 
 -- =====================================================
 -- 4. Index state — AdvanceTrackingSettingSummaries
@@ -115,7 +115,7 @@ PRINT '=== AdvanceTrackingSettingSummaries: Confirm New Optimized Index (expect 
 SELECT name, type_desc
 FROM sys.indexes
 WHERE object_id = OBJECT_ID('AdvanceTrackingSettingSummaries')
-  AND name = 'IX_AdvanceTrackingSettingSummaries_CompanyId_IMEI';
+  AND name = 'IX_AdvanceTrackingSettingSummaries_DeviceSummariesId_imei';
 
 -- =====================================================
 -- 7. TrackedAssets — confirm scan-to-seek fix

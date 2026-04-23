@@ -13,26 +13,24 @@
 -- Index 1: DeviceEvents — narrow covering index
 --
 -- Query patterns served (common across ingestion pipelines):
---   SELECT * FROM DeviceEvents WHERE IMEI = @IMEI AND EventDate > @since
---   SELECT TOP 1 ... FROM DeviceEvents WHERE IMEI = @IMEI ORDER BY EventDate DESC
+--   SELECT * FROM DeviceEvents WHERE IMEI = @IMEI AND TimeStamp > @since
+--   SELECT TOP 1 ... FROM DeviceEvents WHERE IMEI = @IMEI ORDER BY TimeStamp DESC
 --
--- ACTION REQUIRED: Confirm column names against the actual table schema.
--- The key columns (IMEI, EventDate) and INCLUDE list below are based on
--- the DeviceSummaries pattern from Phase 1 and typical DeviceEvents access
--- patterns. Adjust KeyColumns and INCLUDE to match the actual columns
--- returned by Section 6a of the diagnostics script.
+-- Key columns confirmed against actual DeviceEvents schema:
+--   IMEI (nvarchar), TimeStamp (datetime2)
+-- INCLUDE columns confirmed: DeviceId (int), OrganizationId (int)
 -- =====================================================
-PRINT 'Creating IX_DeviceEvents_IMEI_EventDate...'
+PRINT 'Creating IX_DeviceEvents_IMEI_TimeStamp...'
 PRINT 'This will take 45-120 minutes on 19.4M rows. Do NOT cancel.'
 
 IF NOT EXISTS (
     SELECT 1 FROM sys.indexes
-    WHERE name = 'IX_DeviceEvents_IMEI_EventDate'
+    WHERE name = 'IX_DeviceEvents_IMEI_TimeStamp'
       AND object_id = OBJECT_ID('DeviceEvents')
 )
-    CREATE NONCLUSTERED INDEX IX_DeviceEvents_IMEI_EventDate
-    ON [dbo].[DeviceEvents] ([IMEI], [EventDate] DESC)
-    INCLUDE ([CompanyId], [AssetId], [DeviceId])
+    CREATE NONCLUSTERED INDEX IX_DeviceEvents_IMEI_TimeStamp
+    ON [dbo].[DeviceEvents] ([IMEI], [TimeStamp] DESC)
+    INCLUDE ([DeviceId], [OrganizationId])
     WITH (ONLINE = ON, SORT_IN_TEMPDB = ON, FILLFACTOR = 90);
 
 PRINT 'Done.'
@@ -43,23 +41,23 @@ GO
 --
 -- Query patterns served:
 --   SELECT ... FROM AdvanceTrackingSettingSummaries
---     WHERE CompanyId = @CompanyId AND IMEI = @IMEI
+--     WHERE DeviceSummariesId = @DeviceSummariesId AND imei = @imei
 --
--- ACTION REQUIRED: Confirm column names against the actual table schema.
--- Adjust KeyColumns and INCLUDE to match the columns returned by
--- Section 6b of the diagnostics script.
+-- Key columns confirmed against actual AdvanceTrackingSettingSummaries schema:
+--   DeviceSummariesId (int), imei (nvarchar)
+-- INCLUDE columns confirmed: AssetId (int), dataDate (datetime2)
 -- =====================================================
-PRINT 'Creating IX_AdvanceTrackingSettingSummaries_CompanyId_IMEI...'
+PRINT 'Creating IX_AdvanceTrackingSettingSummaries_DeviceSummariesId_imei...'
 PRINT 'This will take 45-120 minutes on 18.6M rows. Do NOT cancel.'
 
 IF NOT EXISTS (
     SELECT 1 FROM sys.indexes
-    WHERE name = 'IX_AdvanceTrackingSettingSummaries_CompanyId_IMEI'
+    WHERE name = 'IX_AdvanceTrackingSettingSummaries_DeviceSummariesId_imei'
       AND object_id = OBJECT_ID('AdvanceTrackingSettingSummaries')
 )
-    CREATE NONCLUSTERED INDEX IX_AdvanceTrackingSettingSummaries_CompanyId_IMEI
-    ON [dbo].[AdvanceTrackingSettingSummaries] ([CompanyId], [IMEI])
-    INCLUDE ([AssetId], [TimeStamp])
+    CREATE NONCLUSTERED INDEX IX_AdvanceTrackingSettingSummaries_DeviceSummariesId_imei
+    ON [dbo].[AdvanceTrackingSettingSummaries] ([DeviceSummariesId], [imei])
+    INCLUDE ([AssetId], [dataDate])
     WITH (ONLINE = ON, SORT_IN_TEMPDB = ON, FILLFACTOR = 90);
 
 PRINT 'Done.'

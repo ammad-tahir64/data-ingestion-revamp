@@ -18,14 +18,14 @@
 PRINT 'Removing new optimized indexes created in Phase 2...'
 
 IF EXISTS (SELECT 1 FROM sys.indexes
-           WHERE name = 'IX_DeviceEvents_IMEI_EventDate'
+           WHERE name = 'IX_DeviceEvents_IMEI_TimeStamp'
              AND object_id = OBJECT_ID('DeviceEvents'))
-    DROP INDEX IX_DeviceEvents_IMEI_EventDate ON DeviceEvents;
+    DROP INDEX IX_DeviceEvents_IMEI_TimeStamp ON DeviceEvents;
 
 IF EXISTS (SELECT 1 FROM sys.indexes
-           WHERE name = 'IX_AdvanceTrackingSettingSummaries_CompanyId_IMEI'
+           WHERE name = 'IX_AdvanceTrackingSettingSummaries_DeviceSummariesId_imei'
              AND object_id = OBJECT_ID('AdvanceTrackingSettingSummaries'))
-    DROP INDEX IX_AdvanceTrackingSettingSummaries_CompanyId_IMEI
+    DROP INDEX IX_AdvanceTrackingSettingSummaries_DeviceSummariesId_imei
         ON AdvanceTrackingSettingSummaries;
 
 IF EXISTS (SELECT 1 FROM sys.indexes

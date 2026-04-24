@@ -129,10 +129,11 @@ BEGIN
         RETURN;
     END
 
-    DECLARE @CutoffDate  DATETIME2    = DATEADD(DAY, -@RetentionDays, SYSUTCDATETIME());
-    DECLARE @RowsMoved   INT          = 0;
-    DECLARE @TotalMoved  INT          = 0;
-    DECLARE @SQL         NVARCHAR(MAX);
+    DECLARE @CutoffDate      DATETIME2    = DATEADD(DAY, -@RetentionDays, SYSUTCDATETIME());
+    DECLARE @RowsMoved       INT          = 0;
+    DECLARE @TotalMoved      INT          = 0;
+    DECLARE @SQL             NVARCHAR(MAX);
+    DECLARE @SafeColName     NVARCHAR(258) = QUOTENAME(@DateColumnName); -- prevents injection
 
     PRINT 'Archiving GeocodeLocationLogs rows older than '
         + CAST(@RetentionDays AS VARCHAR(10)) + ' days (cutoff: '
@@ -150,7 +151,7 @@ BEGIN
             INSERT INTO [dbo].[GeocodeLocationLogs_Archive]
             SELECT TOP (@BatchSize) src.*
             FROM [dbo].[GeocodeLocationLogs] src WITH (UPDLOCK, READPAST)
-            WHERE src.[' + @DateColumnName + N'] < @CutoffDate;
+            WHERE src.' + @SafeColName + N' < @CutoffDate;
             SET @RowsMoved = @@ROWCOUNT;';
 
         EXEC sp_executesql
@@ -169,11 +170,11 @@ BEGIN
         -- did not (e.g. a timeout between the two statements).
         SET @SQL = N'
             DELETE FROM [dbo].[GeocodeLocationLogs]
-            WHERE [' + @DateColumnName + N'] < @CutoffDate
+            WHERE ' + @SafeColName + N' < @CutoffDate
               AND [Id] IN (
                     SELECT [Id]
                     FROM [dbo].[GeocodeLocationLogs_Archive]
-                    WHERE [' + @DateColumnName + N'] < @CutoffDate
+                    WHERE ' + @SafeColName + N' < @CutoffDate
                       AND [ArchivedAt] >= DATEADD(SECOND, -10, SYSUTCDATETIME())
                   );';
 

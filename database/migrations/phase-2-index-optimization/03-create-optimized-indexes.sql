@@ -44,8 +44,11 @@ GO
 --     WHERE DeviceSummariesId = @DeviceSummariesId AND imei = @imei
 --
 -- Key columns confirmed against actual AdvanceTrackingSettingSummaries schema:
---   DeviceSummariesId (int), imei (nvarchar)
--- INCLUDE columns confirmed: AssetId (int), dataDate (datetime2)
+--   DeviceSummariesId (int)
+-- NOTE: imei is an oversized type (text/nvarchar(max)) — invalid as an index key
+--   column (Msg 1919). It is placed in INCLUDE so the index still covers imei
+--   lookups without requiring it to be part of the B-tree key.
+-- INCLUDE columns confirmed: imei, AssetId (int), dataDate (datetime2)
 -- =====================================================
 PRINT 'Creating IX_AdvanceTrackingSettingSummaries_DeviceSummariesId_imei...'
 PRINT 'This will take 45-120 minutes on 18.6M rows. Do NOT cancel.'
@@ -56,8 +59,8 @@ IF NOT EXISTS (
       AND object_id = OBJECT_ID('AdvanceTrackingSettingSummaries')
 )
     CREATE NONCLUSTERED INDEX IX_AdvanceTrackingSettingSummaries_DeviceSummariesId_imei
-    ON [dbo].[AdvanceTrackingSettingSummaries] ([DeviceSummariesId], [imei])
-    INCLUDE ([AssetId], [dataDate])
+    ON [dbo].[AdvanceTrackingSettingSummaries] ([DeviceSummariesId])
+    INCLUDE ([imei], [AssetId], [dataDate])
     WITH (ONLINE = ON, SORT_IN_TEMPDB = ON, FILLFACTOR = 90);
 
 PRINT 'Done.'

@@ -78,51 +78,88 @@ PRINT 'Creating usp_ArchiveGeocodeLocationLogs...'
 GO
 
 CREATE OR ALTER PROCEDURE [dbo].[usp_ArchiveGeocodeLocationLogs]
-    @RetentionDays  INT  = 90,   -- rows older than this are archived
-    @BatchSize      INT  = 5000  -- rows per batch; keeps transactions small
+    @RetentionDays  INT      = 90,   -- rows older than this are archived
+    @BatchSize      INT      = 5000, -- rows per batch; keeps transactions small
+    @DateColumnName SYSNAME  = NULL  -- name of the date/timestamp column to filter on.
+                                     -- Run Section 6e of 01-pre-check-diagnostics.sql to
+                                     -- find the column name, then pass it here.
+                                     -- Common names: CreatedDate, LogDate, EventDate,
+                                     --               Timestamp, CreatedAt.
+                                     -- Example: EXEC usp_ArchiveGeocodeLocationLogs
+                                     --              @RetentionDays = 90,
+                                     --              @DateColumnName = N'CreatedDate';
 AS
 -- =====================================================
 -- Purpose : Move rows older than @RetentionDays from
 --           GeocodeLocationLogs into GeocodeLocationLogs_Archive,
 --           then delete them from the live table.
--- Usage   : EXEC usp_ArchiveGeocodeLocationLogs @RetentionDays = 90;
+-- Usage   : EXEC usp_ArchiveGeocodeLocationLogs
+--               @RetentionDays  = 90,
+--               @DateColumnName = N'<actual_column_name>';
 -- Schedule: Daily SQL Agent job, off-peak hours.
---
--- ACTION REQUIRED — replace <date_column> placeholder (3 occurrences):
---   Line 1: INSERT ... WHERE src.[<date_column>] < @CutoffDate
---   Line 2: DELETE ... WHERE [<date_column>] < @CutoffDate
---   Line 3: AND WHERE [<date_column>] < @CutoffDate  (archive correl. subquery)
---
---   Replace <date_column> with the actual timestamp column name found in
---   Section 6e of the Phase 2A diagnostics.
---   Common names: CreatedDate, LogDate, EventDate, Timestamp, CreatedAt.
---   Search this file for '<date_column>' to locate all three occurrences.
 -- =====================================================
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @CutoffDate  DATETIME2 = DATEADD(DAY, -@RetentionDays, SYSUTCDATETIME());
-    DECLARE @RowsMoved   INT       = 0;
-    DECLARE @TotalMoved  INT       = 0;
+    -- Guard: @DateColumnName must be supplied
+    IF @DateColumnName IS NULL
+    BEGIN
+        RAISERROR(
+            'usp_ArchiveGeocodeLocationLogs: @DateColumnName must be provided. '
+            + 'Run Section 6e of 01-pre-check-diagnostics.sql to identify the '
+            + 'timestamp column, then call: '
+            + 'EXEC usp_ArchiveGeocodeLocationLogs @RetentionDays = 90, @DateColumnName = N''<actual_column>'';',
+            16, 1);
+        RETURN;
+    END
+
+    -- Guard: validate the column actually exists on the live table
+    IF NOT EXISTS (
+        SELECT 1
+        FROM sys.columns
+        WHERE object_id = OBJECT_ID('dbo.GeocodeLocationLogs')
+          AND name       = @DateColumnName
+    )
+    BEGIN
+        RAISERROR(
+            'usp_ArchiveGeocodeLocationLogs: Column ''%s'' does not exist in '
+            + 'dbo.GeocodeLocationLogs. Verify the column name from Section 6e '
+            + 'of 01-pre-check-diagnostics.sql.',
+            16, 1, @DateColumnName);
+        RETURN;
+    END
+
+    DECLARE @CutoffDate  DATETIME2    = DATEADD(DAY, -@RetentionDays, SYSUTCDATETIME());
+    DECLARE @RowsMoved   INT          = 0;
+    DECLARE @TotalMoved  INT          = 0;
+    DECLARE @SQL         NVARCHAR(MAX);
 
     PRINT 'Archiving GeocodeLocationLogs rows older than '
         + CAST(@RetentionDays AS VARCHAR(10)) + ' days (cutoff: '
         + CONVERT(VARCHAR(30), @CutoffDate, 120) + ')';
 
-    -- Process in batches to avoid lock escalation on the live table
+    -- Process in batches to avoid lock escalation on the live table.
+    -- Dynamic SQL is used so that the procedure compiles against the live table
+    -- regardless of the actual date column name; column existence is validated
+    -- by the guard above before any batch runs.
     WHILE 1 = 1
     BEGIN
         BEGIN TRANSACTION;
 
-        -- Line 1: Replace <date_column> with the actual column name
-        INSERT INTO [dbo].[GeocodeLocationLogs_Archive]
-        SELECT TOP (@BatchSize) src.*
-        FROM [dbo].[GeocodeLocationLogs] src WITH (UPDLOCK, READPAST)
-        WHERE src.[<date_column>] < @CutoffDate;
+        SET @SQL = N'
+            INSERT INTO [dbo].[GeocodeLocationLogs_Archive]
+            SELECT TOP (@BatchSize) src.*
+            FROM [dbo].[GeocodeLocationLogs] src WITH (UPDLOCK, READPAST)
+            WHERE src.[' + @DateColumnName + N'] < @CutoffDate;
+            SET @RowsMoved = @@ROWCOUNT;';
 
-        SET @RowsMoved = @@ROWCOUNT;
+        EXEC sp_executesql
+            @SQL,
+            N'@BatchSize INT, @CutoffDate DATETIME2, @RowsMoved INT OUTPUT',
+            @BatchSize  = @BatchSize,
+            @CutoffDate = @CutoffDate,
+            @RowsMoved  = @RowsMoved OUTPUT;
 
-        -- Line 2 & 3: Replace <date_column> with the actual column name.
         -- The 10-second window in the ArchivedAt filter ensures the DELETE
         -- only removes rows that were inserted into the archive table during
         -- THIS batch (i.e. within the same transaction).  This prevents the
@@ -130,14 +167,20 @@ BEGIN
         -- to share the same date-range predicate, protecting against any
         -- partial re-run scenario where the INSERT committed but the DELETE
         -- did not (e.g. a timeout between the two statements).
-        DELETE FROM [dbo].[GeocodeLocationLogs]
-        WHERE [<date_column>] < @CutoffDate
-          AND [Id] IN (
-                SELECT [Id]
-                FROM [dbo].[GeocodeLocationLogs_Archive]
-                WHERE [<date_column>] < @CutoffDate
-                  AND [ArchivedAt] >= DATEADD(SECOND, -10, SYSUTCDATETIME())
-              );
+        SET @SQL = N'
+            DELETE FROM [dbo].[GeocodeLocationLogs]
+            WHERE [' + @DateColumnName + N'] < @CutoffDate
+              AND [Id] IN (
+                    SELECT [Id]
+                    FROM [dbo].[GeocodeLocationLogs_Archive]
+                    WHERE [' + @DateColumnName + N'] < @CutoffDate
+                      AND [ArchivedAt] >= DATEADD(SECOND, -10, SYSUTCDATETIME())
+                  );';
+
+        EXEC sp_executesql
+            @SQL,
+            N'@CutoffDate DATETIME2',
+            @CutoffDate = @CutoffDate;
 
         COMMIT TRANSACTION;
 
@@ -173,7 +216,8 @@ FROM [dbo].[GeocodeLocationLogs_Archive];
 GO
 
 PRINT 'Archival objects created.'
-PRINT 'ACTION: Replace <date_column> placeholders in usp_ArchiveGeocodeLocationLogs with the actual column name.'
-PRINT 'ACTION: Schedule a daily SQL Agent job: EXEC usp_ArchiveGeocodeLocationLogs @RetentionDays = 90;'
+PRINT 'ACTION: Run Section 6e of 01-pre-check-diagnostics.sql to identify the timestamp column name.'
+PRINT 'ACTION: First manual run — EXEC usp_ArchiveGeocodeLocationLogs @RetentionDays = 90, @DateColumnName = N''<actual_column_name>'';'
+PRINT 'ACTION: Schedule a daily SQL Agent job using the same EXEC with the confirmed @DateColumnName value.'
 PRINT 'Proceed to 05-post-check-validation.sql'
 GO

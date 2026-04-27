@@ -1,16 +1,82 @@
 -- =====================================================
--- Phase 2, Step 5: Post-Check Validation (Phase 2C)
+-- Phase 1, Step 5: Post-Check Validation
 -- Run AFTER: 04-geocodelocationlogs-archival.sql
 -- Wait at least 15-30 minutes after completing steps 2-4
 --   before reading DTU metrics.
 -- Wait one week (or until the archival proc has run at least once)
---   before comparing table sizes in Section 5 below.
--- Purpose: Confirm storage reductions and that DTU continues to trend down.
+--   before comparing GeocodeLocationLogs table size.
+-- Purpose: Confirm storage reductions and that DTU trends downward.
 -- Compare all output against 01-pre-check-validation.sql baseline.
 -- =====================================================
 
 -- =====================================================
--- 1. Index state — DeviceEvents
+-- 1. Index state — DeviceSummaries
+-- Expected: 3 bloated indexes gone; only PK, 2 retained indexes,
+-- and IX_DeviceSummaries_IMEI_TimeStamp_IsMove remain (4 total).
+-- =====================================================
+PRINT '=== DeviceSummaries: Indexes After Changes (compare with pre-check) ==='
+SELECT
+    i.name      AS IndexName,
+    i.type_desc AS IndexType,
+    i.is_unique,
+    STRING_AGG(
+        CASE WHEN ic.is_included_column = 0
+             THEN COL_NAME(ic.object_id, ic.column_id)
+        END, ', '
+    ) WITHIN GROUP (ORDER BY ic.key_ordinal)   AS KeyColumns,
+    STRING_AGG(
+        CASE WHEN ic.is_included_column = 1
+             THEN COL_NAME(ic.object_id, ic.column_id)
+        END, ', '
+    ) WITHIN GROUP (ORDER BY ic.key_ordinal)   AS IncludedColumns
+FROM sys.indexes i
+JOIN sys.index_columns ic
+    ON i.object_id = ic.object_id
+    AND i.index_id = ic.index_id
+WHERE OBJECT_NAME(i.object_id) = 'DeviceSummaries'
+GROUP BY i.name, i.type_desc, i.is_unique
+ORDER BY i.name;
+
+-- =====================================================
+-- 2. Index sizes — DeviceSummaries
+-- =====================================================
+PRINT '=== DeviceSummaries: Index Sizes After Changes (GB) ==='
+SELECT
+    i.name  AS IndexName,
+    CAST(ROUND(SUM(a.total_pages) * 8.0 / 1024 / 1024, 2) AS DECIMAL(18,2)) AS SizeGB
+FROM sys.indexes i
+JOIN sys.partitions p
+    ON i.object_id = p.object_id
+    AND i.index_id = p.index_id
+JOIN sys.allocation_units a
+    ON p.partition_id = a.container_id
+WHERE OBJECT_NAME(i.object_id) = 'DeviceSummaries'
+GROUP BY i.name
+ORDER BY SizeGB DESC;
+
+-- =====================================================
+-- 3. Confirm dropped DeviceSummaries indexes are gone (expect 0 rows)
+-- =====================================================
+PRINT '=== DeviceSummaries: Confirm Dropped Indexes Are Gone (expect 0 rows) ==='
+SELECT name FROM sys.indexes
+WHERE object_id = OBJECT_ID('DeviceSummaries')
+  AND name IN (
+    'IX_DeviceSummaries_DeviceId',
+    'nci_wi_DeviceSummaries_DDD72ECE7AF305F90C5D1276C40FA2C6',
+    'nci_wi_DeviceSummaries_B3EAFC8EB862D751B8E12B44239366B1'
+  );
+
+-- =====================================================
+-- 4. Confirm new DeviceSummaries index exists (expect 1 row)
+-- =====================================================
+PRINT '=== DeviceSummaries: Confirm New Optimized Index (expect 1 row) ==='
+SELECT name, type_desc
+FROM sys.indexes
+WHERE object_id = OBJECT_ID('DeviceSummaries')
+  AND name = 'IX_DeviceSummaries_IMEI_TimeStamp_IsMove';
+
+-- =====================================================
+-- 5. Index state — DeviceEvents
 -- Expected: No bloated indexes remain; only the PK and the new
 -- IX_DeviceEvents_IMEI_TimeStamp are present.
 -- =====================================================
@@ -38,7 +104,7 @@ GROUP BY i.name, i.type_desc, i.is_unique
 ORDER BY i.name;
 
 -- =====================================================
--- 2. Index sizes — DeviceEvents
+-- 6. Index sizes — DeviceEvents
 -- =====================================================
 PRINT '=== DeviceEvents: Index Sizes After Changes (GB) ==='
 SELECT
@@ -55,8 +121,7 @@ GROUP BY i.name
 ORDER BY SizeGB DESC;
 
 -- =====================================================
--- 3. Confirm new DeviceEvents index exists
--- Expected: 1 row
+-- 7. Confirm new DeviceEvents index exists (expect 1 row)
 -- =====================================================
 PRINT '=== DeviceEvents: Confirm New Optimized Index (expect 1 row) ==='
 SELECT name, type_desc
@@ -65,7 +130,7 @@ WHERE object_id = OBJECT_ID('DeviceEvents')
   AND name = 'IX_DeviceEvents_IMEI_TimeStamp';
 
 -- =====================================================
--- 4. Index state — AdvanceTrackingSettingSummaries
+-- 8. Index state — AdvanceTrackingSettingSummaries
 -- =====================================================
 PRINT '=== AdvanceTrackingSettingSummaries: Indexes After Changes (compare with pre-check) ==='
 SELECT
@@ -91,7 +156,7 @@ GROUP BY i.name, i.type_desc, i.is_unique
 ORDER BY i.name;
 
 -- =====================================================
--- 5. Index sizes — AdvanceTrackingSettingSummaries
+-- 9. Index sizes — AdvanceTrackingSettingSummaries
 -- =====================================================
 PRINT '=== AdvanceTrackingSettingSummaries: Index Sizes After Changes (GB) ==='
 SELECT
@@ -108,8 +173,7 @@ GROUP BY i.name
 ORDER BY SizeGB DESC;
 
 -- =====================================================
--- 6. Confirm new AdvanceTrackingSettingSummaries index exists
--- Expected: 1 row
+-- 10. Confirm new AdvanceTrackingSettingSummaries index exists (expect 1 row)
 -- =====================================================
 PRINT '=== AdvanceTrackingSettingSummaries: Confirm New Optimized Index (expect 1 row) ==='
 SELECT name, type_desc
@@ -118,8 +182,7 @@ WHERE object_id = OBJECT_ID('AdvanceTrackingSettingSummaries')
   AND name = 'IX_AdvanceTrackingSettingSummaries_DeviceSummariesId_imei';
 
 -- =====================================================
--- 7. TrackedAssets — confirm scan-to-seek fix
--- Expected: IX_TrackedAssets_CompanyId exists (1 row)
+-- 11. TrackedAssets — confirm scan-to-seek fix (expect 1 row)
 -- =====================================================
 PRINT '=== TrackedAssets: Confirm Covering Index Exists (expect 1 row) ==='
 SELECT name, type_desc
@@ -128,7 +191,7 @@ WHERE object_id = OBJECT_ID('TrackedAssets')
   AND name = 'IX_TrackedAssets_CompanyId';
 
 -- =====================================================
--- 8. GeocodeLocationLogs — confirm archival ran
+-- 12. GeocodeLocationLogs — confirm archival ran
 -- Expected: live row count < pre-check baseline
 -- =====================================================
 PRINT '=== GeocodeLocationLogs: Row Counts (live vs archive) ==='
@@ -143,12 +206,12 @@ SELECT
 FROM [dbo].[GeocodeLocationLogs_Archive];
 
 -- =====================================================
--- 9. Top 20 tables by allocated size (Phase 2C — Section 5 re-run)
--- Compare with the Section 5 output saved from the Phase 2A diagnostics.
--- Expected: DeviceEvents, AdvanceTrackingSettingSummaries, and
--- GeocodeLocationLogs all smaller than their pre-change baselines.
+-- 13. Top 20 tables by allocated size
+-- Compare with pre-check baseline saved from 01-pre-check-validation.sql.
+-- Expected: DeviceSummaries, DeviceEvents, AdvanceTrackingSettingSummaries,
+-- and GeocodeLocationLogs all smaller than their pre-check baselines.
 -- =====================================================
-PRINT '=== Top 20 Tables by Allocated Size (Phase 2C re-run — compare with Phase 2A baseline) ==='
+PRINT '=== Top 20 Tables by Allocated Size (compare with pre-check baseline) ==='
 SELECT TOP 20
     OBJECT_NAME(i.object_id)   AS TableName,
     CAST(
@@ -159,7 +222,7 @@ SELECT TOP 20
         ROUND(SUM(a.total_pages) * 8.0 / 1024 / 1024, 2)
         AS DECIMAL(18,2)
     )                          AS TotalSizeGB,
-    SUM(p.rows)                AS [RowCount]   -- bracketed: ROWCOUNT is a reserved keyword
+    SUM(p.rows)                AS [RowCount]
 FROM sys.indexes i
 JOIN sys.partitions p
     ON i.object_id = p.object_id
@@ -174,12 +237,11 @@ GROUP BY i.object_id
 ORDER BY UsedSizeGB DESC;
 
 -- =====================================================
--- 10. DTU after changes — compare with pre-check baseline
+-- 14. DTU after changes — compare with pre-check baseline
 -- Allow at least 15-30 minutes after completing Step 4 before reading this.
--- Expected: avg_data_io_percent and avg_log_write_percent continue
--- trending downward from the Phase 1 baseline.
+-- Expected: avg_data_io_percent and avg_log_write_percent trend downward.
 -- =====================================================
-PRINT '=== DTU After Phase 2 Changes (compare with pre-check baseline) ==='
+PRINT '=== DTU After Changes (compare with pre-check baseline) ==='
 SELECT
     end_time,
     avg_cpu_percent,

@@ -1,16 +1,44 @@
 -- =====================================================
--- Phase 2, Step 3: Create Optimized Indexes
+-- Phase 1, Step 3: Create Optimized Indexes
 -- Run AFTER: 02-drop-bloated-indexes.sql
 -- Expected duration:
---   DeviceEvents              ~45-120 min  (19.4M rows, ONLINE = ON)
---   AdvanceTrackingSettingSummaries ~45-120 min  (18.6M rows, ONLINE = ON)
---   TrackedAssets             ~1-5 min     (46K rows)
+--   DeviceSummaries                         ~30-90 min  (23.6M rows, ONLINE = ON)
+--   DeviceEvents                            ~45-120 min (19.4M rows, ONLINE = ON)
+--   AdvanceTrackingSettingSummaries         ~45-120 min (18.6M rows, ONLINE = ON)
+--   TrackedAssets                           ~1-5 min    (46K rows)
 -- Risk: LOW — ONLINE = ON means no blocking during build
 -- Rollback: Run 06-rollback.sql to drop these indexes
 -- =====================================================
 
 -- =====================================================
--- Index 1: DeviceEvents — narrow covering index
+-- Index 1: DeviceSummaries — narrow covering index
+--
+-- Query patterns served:
+--   SELECT COUNT(*) FROM DeviceSummaries WHERE IMEI = @IMEI AND TimeStamp > @Date AND IsMove = 1
+--   SELECT TOP 1 CompanyId, AssetId FROM DeviceSummaries WHERE IMEI = @IMEI ORDER BY TimeStamp DESC
+--
+-- Replaces all 3 dropped bloated indexes for actual query patterns.
+-- INCLUDE columns cover the most common projected columns so the query
+-- engine does not need to do a key lookup back to the clustered index.
+-- =====================================================
+PRINT 'Creating IX_DeviceSummaries_IMEI_TimeStamp_IsMove...'
+PRINT 'This will take 30-90 minutes on 23.6M rows. Do NOT cancel.'
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE name = 'IX_DeviceSummaries_IMEI_TimeStamp_IsMove'
+      AND object_id = OBJECT_ID('DeviceSummaries')
+)
+    CREATE NONCLUSTERED INDEX IX_DeviceSummaries_IMEI_TimeStamp_IsMove
+    ON [dbo].[DeviceSummaries] ([IMEI], [TimeStamp] DESC)
+    INCLUDE ([IsMove], [CompanyId], [AssetId])
+    WITH (ONLINE = ON, SORT_IN_TEMPDB = ON, FILLFACTOR = 90);
+
+PRINT 'Done.'
+GO
+
+-- =====================================================
+-- Index 2: DeviceEvents — narrow covering index
 --
 -- Query patterns served (common across ingestion pipelines):
 --   SELECT * FROM DeviceEvents WHERE IMEI = @IMEI AND TimeStamp > @since
@@ -37,7 +65,7 @@ PRINT 'Done.'
 GO
 
 -- =====================================================
--- Index 2: AdvanceTrackingSettingSummaries — narrow covering index
+-- Index 3: AdvanceTrackingSettingSummaries — narrow covering index
 --
 -- Query patterns served:
 --   SELECT ... FROM AdvanceTrackingSettingSummaries
@@ -67,11 +95,11 @@ PRINT 'Done.'
 GO
 
 -- =====================================================
--- Index 3: TrackedAssets — covering index to resolve full-table scans
+-- Index 4: TrackedAssets — covering index to resolve full-table scans
 --
--- Rationale: Section 4 of the Phase 2A diagnostics showed PK_TrackedAssets
--- with 1,614 scans and only 24 seeks. The clustered PK (Id) is not selective
--- for the WHERE clause being used, forcing a full scan on every call.
+-- Rationale: PK_TrackedAssets showed 1,614 scans and only 24 seeks.
+-- The clustered PK (Id) is not selective for the WHERE clause in use,
+-- forcing a full scan on every call.
 -- The most likely filter column is CompanyId (multi-tenant lookup pattern).
 -- This index converts those scans to seeks.
 --

@@ -1,5 +1,5 @@
 -- =====================================================
--- Phase 2, Step 4: GeocodeLocationLogs — Archival Strategy
+-- Phase 1, Step 4: GeocodeLocationLogs — Archival Strategy
 -- Run during: OFF-HOURS MAINTENANCE WINDOW ONLY
 -- Run AFTER: 03-create-optimized-indexes.sql
 -- Risk: LOW — rows are moved to an archive table, not deleted.

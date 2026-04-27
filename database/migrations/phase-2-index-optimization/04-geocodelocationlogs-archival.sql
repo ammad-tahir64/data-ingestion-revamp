@@ -95,7 +95,7 @@ AS
 --           then delete them from the live table.
 -- Usage   : EXEC usp_ArchiveGeocodeLocationLogs
 --               @RetentionDays  = 90,
---               @DateColumnName = N'<actual_column_name>';
+--               @DateColumnName = N'Created';
 -- Schedule: Daily SQL Agent job, off-peak hours.
 -- =====================================================
 BEGIN
@@ -149,7 +149,7 @@ BEGIN
 
         SET @SQL = N'
             INSERT INTO [dbo].[GeocodeLocationLogs_Archive]
-            SELECT TOP (@BatchSize) src.*
+            SELECT TOP (@BatchSize) src.*, SYSUTCDATETIME()
             FROM [dbo].[GeocodeLocationLogs] src WITH (UPDLOCK, READPAST)
             WHERE src.' + @SafeColName + N' < @CutoffDate;
             SET @RowsMoved = @@ROWCOUNT;';
@@ -217,8 +217,7 @@ FROM [dbo].[GeocodeLocationLogs_Archive];
 GO
 
 PRINT 'Archival objects created.'
-PRINT 'ACTION: Run Section 6e of 01-pre-check-diagnostics.sql to identify the timestamp column name.'
-PRINT 'ACTION: First manual run — EXEC usp_ArchiveGeocodeLocationLogs @RetentionDays = 90, @DateColumnName = N''<actual_column_name>'';'
+PRINT 'ACTION: First manual run — EXEC usp_ArchiveGeocodeLocationLogs @RetentionDays = 90, @DateColumnName = N''Created'';'
 PRINT 'ACTION: Schedule a daily SQL Agent job using the same EXEC with the confirmed @DateColumnName value.'
 PRINT 'Proceed to 05-post-check-validation.sql'
 GO

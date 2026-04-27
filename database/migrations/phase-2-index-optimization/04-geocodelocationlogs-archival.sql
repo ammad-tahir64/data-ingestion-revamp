@@ -187,19 +187,25 @@ BEGIN
         -- the IDENTITY_INSERT ON setting is visible to the INSERT inside it.
         SET IDENTITY_INSERT [dbo].[GeocodeLocationLogs_Archive] ON;
 
+        -- @BatchSize (INT) and @CutoffDate (DATETIME2 rendered as ISO 8601) are
+        -- embedded as literals rather than passed as sp_executesql parameters.
+        -- Passing them as parameters while IDENTITY_INSERT is ON in the outer
+        -- scope causes SQL Server to silently treat IDENTITY_INSERT as OFF
+        -- inside the batch, raising Msg 8101.  Both values are controlled by
+        -- the procedure (INT arithmetic / SYSUTCDATETIME offset), so
+        -- embedding them as literals introduces no SQL-injection risk.
+        -- @@ROWCOUNT after EXEC returns the row count of the last statement
+        -- in the executed batch (the INSERT), so it is captured immediately
+        -- after the EXEC in the outer scope.
         SET @SQL = N'
             INSERT INTO [dbo].[GeocodeLocationLogs_Archive] (' + @InsertColList + N')
-            SELECT TOP (@BatchSize) ' + @SelectColList + N'
+            SELECT TOP (' + CAST(@BatchSize AS NVARCHAR(20)) + N') ' + @SelectColList + N'
             FROM [dbo].[GeocodeLocationLogs] src WITH (UPDLOCK, READPAST)
-            WHERE src.' + @SafeColName + N' < @CutoffDate;
-            SET @RowsMoved = @@ROWCOUNT;';
+            WHERE src.' + @SafeColName + N' < CONVERT(DATETIME2, N'''
+                + CONVERT(NVARCHAR(50), @CutoffDate, 126) + N''', 126);';
 
-        EXEC sp_executesql
-            @SQL,
-            N'@BatchSize INT, @CutoffDate DATETIME2, @RowsMoved INT OUTPUT',
-            @BatchSize  = @BatchSize,
-            @CutoffDate = @CutoffDate,
-            @RowsMoved  = @RowsMoved OUTPUT;
+        EXEC sp_executesql @SQL;
+        SET @RowsMoved = @@ROWCOUNT;
 
         SET IDENTITY_INSERT [dbo].[GeocodeLocationLogs_Archive] OFF;
 

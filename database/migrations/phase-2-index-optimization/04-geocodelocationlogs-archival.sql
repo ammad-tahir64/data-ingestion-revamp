@@ -178,14 +178,21 @@ BEGIN
 
         -- IDENTITY_INSERT must be ON so that the original Id values are
         -- preserved in the archive (enabling re-insertion / rollback).
+        -- NOTE: SET IDENTITY_INSERT cannot be placed inside a parameterised
+        -- sp_executesql batch — SQL Server will refuse to bind the declared
+        -- parameters (@BatchSize, @RowsMoved, etc.) when the batch contains
+        -- that statement, producing Msg 102/137/319.  It is therefore issued
+        -- as plain T-SQL in the outer procedure scope, which is valid; the
+        -- same session/connection is used by the sp_executesql call below, so
+        -- the IDENTITY_INSERT ON setting is visible to the INSERT inside it.
+        SET IDENTITY_INSERT [dbo].[GeocodeLocationLogs_Archive] ON;
+
         SET @SQL = N'
-            SET IDENTITY_INSERT [dbo].[GeocodeLocationLogs_Archive] ON;
             INSERT INTO [dbo].[GeocodeLocationLogs_Archive] (' + @InsertColList + N')
             SELECT TOP (@BatchSize) ' + @SelectColList + N'
             FROM [dbo].[GeocodeLocationLogs] src WITH (UPDLOCK, READPAST)
             WHERE src.' + @SafeColName + N' < @CutoffDate;
-            SET @RowsMoved = @@ROWCOUNT;
-            SET IDENTITY_INSERT [dbo].[GeocodeLocationLogs_Archive] OFF;';
+            SET @RowsMoved = @@ROWCOUNT;';
 
         EXEC sp_executesql
             @SQL,
@@ -193,6 +200,8 @@ BEGIN
             @BatchSize  = @BatchSize,
             @CutoffDate = @CutoffDate,
             @RowsMoved  = @RowsMoved OUTPUT;
+
+        SET IDENTITY_INSERT [dbo].[GeocodeLocationLogs_Archive] OFF;
 
         -- The 10-second window in the ArchivedAt filter ensures the DELETE
         -- only removes rows that were inserted into the archive table during

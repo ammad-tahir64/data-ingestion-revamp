@@ -135,6 +135,35 @@ BEGIN
     DECLARE @SQL             NVARCHAR(MAX);
     DECLARE @SafeColName     NVARCHAR(258) = QUOTENAME(@DateColumnName); -- prevents injection
 
+    -- Build explicit column lists once before the loop.
+    -- The archive table was created via SELECT TOP 0 * INTO, so the live
+    -- table's IDENTITY property was inherited by the Id column.  SQL Server
+    -- rejects an INSERT without a column list when IDENTITY_INSERT is OFF,
+    -- so we enumerate every column explicitly and wrap the INSERT with
+    -- SET IDENTITY_INSERT ON/OFF to preserve the original Id values
+    -- (needed so the subsequent DELETE by Id is correct, and so rows can be
+    -- re-inserted into the live table from the archive if a rollback is needed).
+    DECLARE @InsertColList NVARCHAR(MAX);  -- target column list  (archive table)
+    DECLARE @SelectColList NVARCHAR(MAX);  -- source column list  (live table)
+
+    -- All columns that exist on the live table, in definition order.
+    SELECT @SelectColList =
+        STRING_AGG(N'src.' + QUOTENAME(name), N', ')
+            WITHIN GROUP (ORDER BY column_id)
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID('dbo.GeocodeLocationLogs');
+
+    -- Same columns for the archive INSERT target, plus the ArchivedAt column.
+    SELECT @InsertColList =
+        STRING_AGG(QUOTENAME(name), N', ')
+            WITHIN GROUP (ORDER BY column_id)
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID('dbo.GeocodeLocationLogs_Archive')
+      AND name <> N'ArchivedAt';
+
+    SET @InsertColList = @InsertColList + N', [ArchivedAt]';
+    SET @SelectColList = @SelectColList + N', SYSUTCDATETIME()';
+
     PRINT 'Archiving GeocodeLocationLogs rows older than '
         + CAST(@RetentionDays AS VARCHAR(10)) + ' days (cutoff: '
         + CONVERT(VARCHAR(30), @CutoffDate, 120) + ')';
@@ -147,12 +176,16 @@ BEGIN
     BEGIN
         BEGIN TRANSACTION;
 
+        -- IDENTITY_INSERT must be ON so that the original Id values are
+        -- preserved in the archive (enabling re-insertion / rollback).
         SET @SQL = N'
-            INSERT INTO [dbo].[GeocodeLocationLogs_Archive]
-            SELECT TOP (@BatchSize) src.*, SYSUTCDATETIME()
+            SET IDENTITY_INSERT [dbo].[GeocodeLocationLogs_Archive] ON;
+            INSERT INTO [dbo].[GeocodeLocationLogs_Archive] (' + @InsertColList + N')
+            SELECT TOP (@BatchSize) ' + @SelectColList + N'
             FROM [dbo].[GeocodeLocationLogs] src WITH (UPDLOCK, READPAST)
             WHERE src.' + @SafeColName + N' < @CutoffDate;
-            SET @RowsMoved = @@ROWCOUNT;';
+            SET @RowsMoved = @@ROWCOUNT;
+            SET IDENTITY_INSERT [dbo].[GeocodeLocationLogs_Archive] OFF;';
 
         EXEC sp_executesql
             @SQL,

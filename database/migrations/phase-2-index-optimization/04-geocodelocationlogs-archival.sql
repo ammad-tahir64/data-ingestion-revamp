@@ -101,15 +101,16 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    DECLARE @ErrMsg NVARCHAR(2048);
+
     -- Guard: @DateColumnName must be supplied
     IF @DateColumnName IS NULL
     BEGIN
-        RAISERROR(
-            'usp_ArchiveGeocodeLocationLogs: @DateColumnName must be provided. '
-            + 'Run Section 6e of 01-pre-check-diagnostics.sql to identify the '
-            + 'timestamp column, then call: '
-            + 'EXEC usp_ArchiveGeocodeLocationLogs @RetentionDays = 90, @DateColumnName = N''<actual_column>'';',
-            16, 1);
+        SET @ErrMsg = N'usp_ArchiveGeocodeLocationLogs: @DateColumnName must be provided. '
+            + N'Run Section 6e of 01-pre-check-diagnostics.sql to identify the '
+            + N'timestamp column, then call: '
+            + N'EXEC usp_ArchiveGeocodeLocationLogs @RetentionDays = 90, @DateColumnName = N''<actual_column>'';';
+        RAISERROR(@ErrMsg, 16, 1);
         RETURN;
     END
 
@@ -121,11 +122,10 @@ BEGIN
           AND name       = @DateColumnName
     )
     BEGIN
-        RAISERROR(
-            'usp_ArchiveGeocodeLocationLogs: Column ''%s'' does not exist in '
-            + 'dbo.GeocodeLocationLogs. Verify the column name from Section 6e '
-            + 'of 01-pre-check-diagnostics.sql.',
-            16, 1, @DateColumnName);
+        SET @ErrMsg = N'usp_ArchiveGeocodeLocationLogs: Column ''' + @DateColumnName
+            + N''' does not exist in dbo.GeocodeLocationLogs. '
+            + N'Verify the column name from Section 6e of 01-pre-check-diagnostics.sql.';
+        RAISERROR(@ErrMsg, 16, 1);
         RETURN;
     END
 

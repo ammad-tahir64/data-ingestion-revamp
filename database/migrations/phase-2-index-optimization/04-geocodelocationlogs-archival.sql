@@ -197,25 +197,33 @@ BEGIN
         -- @@ROWCOUNT after EXEC returns the row count of the last statement
         -- in the executed batch (the INSERT), so it is captured immediately
         -- after the EXEC in the outer scope.
+        -- NOT EXISTS ensures rows already present in the archive (e.g. from a
+        -- previous run whose DELETE did not complete) are skipped, making the
+        -- INSERT idempotent and preventing Msg 2627 duplicate-key violations.
         SET @SQL = N'
             INSERT INTO [dbo].[GeocodeLocationLogs_Archive] (' + @InsertColList + N')
             SELECT TOP (' + CAST(@BatchSize AS NVARCHAR(20)) + N') ' + @SelectColList + N'
             FROM [dbo].[GeocodeLocationLogs] src WITH (UPDLOCK, READPAST)
             WHERE src.' + @SafeColName + N' < CONVERT(DATETIME2, N'''
-                + CONVERT(NVARCHAR(50), @CutoffDate, 126) + N''', 126);';
+                + CONVERT(NVARCHAR(50), @CutoffDate, 126) + N''', 126)
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM [dbo].[GeocodeLocationLogs_Archive] a
+                    WHERE a.[Id] = src.[Id]
+                  );';
 
         EXEC sp_executesql @SQL;
         SET @RowsMoved = @@ROWCOUNT;
 
         SET IDENTITY_INSERT [dbo].[GeocodeLocationLogs_Archive] OFF;
 
-        -- The 10-second window in the ArchivedAt filter ensures the DELETE
-        -- only removes rows that were inserted into the archive table during
-        -- THIS batch (i.e. within the same transaction).  This prevents the
-        -- DELETE from touching rows archived in a previous batch that happen
-        -- to share the same date-range predicate, protecting against any
-        -- partial re-run scenario where the INSERT committed but the DELETE
-        -- did not (e.g. a timeout between the two statements).
+        -- Delete exactly the rows that are now in the archive and still exist
+        -- in the live table.  The previous ArchivedAt time-window guard
+        -- (DATEADD(SECOND,-10,...)) was the root cause of Msg 2627: batches
+        -- that took >10 s would have their DELETE match 0 rows, leaving
+        -- already-archived rows in the live table, which then caused duplicate-
+        -- key violations on the next run.  A direct Id-based join is correct,
+        -- simpler, and not sensitive to batch execution time.
         SET @SQL = N'
             DELETE FROM [dbo].[GeocodeLocationLogs]
             WHERE ' + @SafeColName + N' < @CutoffDate
@@ -223,7 +231,6 @@ BEGIN
                     SELECT [Id]
                     FROM [dbo].[GeocodeLocationLogs_Archive]
                     WHERE ' + @SafeColName + N' < @CutoffDate
-                      AND [ArchivedAt] >= DATEADD(SECOND, -10, SYSUTCDATETIME())
                   );';
 
         EXEC sp_executesql

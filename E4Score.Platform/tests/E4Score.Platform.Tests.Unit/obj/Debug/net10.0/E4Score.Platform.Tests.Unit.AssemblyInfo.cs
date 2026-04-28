@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("E4Score.Platform.Tests.Unit")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+922c00b15803847628315464dfcd28144e91fb7e")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a237c5b09a82438f4c76a4041dd74d95e6eeb490")]
 [assembly: System.Reflection.AssemblyProductAttribute("E4Score.Platform.Tests.Unit")]
 [assembly: System.Reflection.AssemblyTitleAttribute("E4Score.Platform.Tests.Unit")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

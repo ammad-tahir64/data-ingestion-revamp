@@ -51,7 +51,7 @@ Copy `appsettings.json` and fill in:
 docker run -d -p 1433:1433 -e SA_PASSWORD=YourPassword123! -e ACCEPT_EULA=Y mcr.microsoft.com/mssql/server
 docker run -d -p 6379:6379 redis
 
-# Run the worker
+# Run the worker (.NET 10 SDK required)
 cd src/E4Score.Platform.Worker
 dotnet run
 ```

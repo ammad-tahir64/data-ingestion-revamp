@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("E4Score.Platform.Worker")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fb3134fc9afe8de1685e40a21fb958af1c4f5d28")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+922c00b15803847628315464dfcd28144e91fb7e")]
 [assembly: System.Reflection.AssemblyProductAttribute("E4Score.Platform.Worker")]
 [assembly: System.Reflection.AssemblyTitleAttribute("E4Score.Platform.Worker")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

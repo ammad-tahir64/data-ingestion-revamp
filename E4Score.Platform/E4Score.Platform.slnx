@@ -5,4 +5,7 @@
     <Project Path="src/E4Score.Platform.Infrastructure/E4Score.Platform.Infrastructure.csproj" />
     <Project Path="src/E4Score.Platform.Worker/E4Score.Platform.Worker.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/E4Score.Platform.Tests.Unit/E4Score.Platform.Tests.Unit.csproj" />
+  </Folder>
 </Solution>

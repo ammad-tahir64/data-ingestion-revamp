@@ -53,6 +53,9 @@ public sealed class SqlBatchWriter
             // Step 5: Upsert asset state
             await UpsertAssetStatesAsync(connection, transaction!, batch, ct);
 
+            // Step 6: Insert outbox messages for events that require notification
+            await BulkInsertOutboxAsync(connection, transaction!, batch, ct);
+
             await transaction!.CommitAsync(ct);
             _logger.LogDebug("Flushed batch of {Count} events to SQL Server", batch.Count);
         }
@@ -222,6 +225,44 @@ public sealed class SqlBatchWriter
             table.Rows.Add(row);
         }
         return table;
+    }
+
+    private static async Task BulkInsertOutboxAsync(SqlConnection connection, SqlTransaction transaction,
+        IReadOnlyList<EnrichedTelemetryEvent> batch, CancellationToken ct)
+    {
+        var notifiable = batch.Where(e => e.RequiresNotification).ToList();
+        if (notifiable.Count == 0) return;
+
+        var table = new DataTable("outbox_message");
+        table.Columns.Add("id", typeof(Guid));
+        table.Columns.Add("event_type", typeof(string));
+        table.Columns.Add("payload", typeof(string));
+        table.Columns.Add("created_at", typeof(DateTime));
+
+        foreach (var e in notifiable)
+        {
+            var payload = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                e.Imei,
+                e.AssetUuid,
+                e.AssetName,
+                e.Latitude,
+                e.Longitude,
+                e.IsMove,
+                e.Speed,
+                e.SourceTimestamp,
+                e.ProcessedAt
+            });
+
+            var row = table.NewRow();
+            row["id"] = Guid.NewGuid();
+            row["event_type"] = "TelemetryProcessed";
+            row["payload"] = payload;
+            row["created_at"] = e.ProcessedAt;
+            table.Rows.Add(row);
+        }
+
+        await BulkInsertAsync(connection, transaction, "outbox_message", table, ct);
     }
 
     // ── Dapper MERGE for state tables ────────────────────────────────────────

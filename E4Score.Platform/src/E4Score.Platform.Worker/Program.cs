@@ -4,6 +4,7 @@ using Azure.Storage.Blobs;
 using E4Score.Platform.Contracts.Events;
 using E4Score.Platform.Contracts.Interfaces;
 using E4Score.Platform.Domain.Services;
+using E4Score.Platform.Infrastructure.Google;
 using E4Score.Platform.Infrastructure.Redis;
 using E4Score.Platform.Infrastructure.ServiceBus;
 using E4Score.Platform.Infrastructure.SqlServer.BulkOperations;
@@ -70,8 +71,16 @@ builder.Services.AddSingleton<IDeviceStateCacheService, RedisDeviceStateCacheSer
 builder.Services.AddSingleton<IDeviceRuntimeStateCache, RedisDeviceRuntimeStateCache>();
 builder.Services.AddSingleton<IIdempotencyService, RedisIdempotencyService>();
 builder.Services.AddSingleton<RedisCachedGeocodingService>();
+builder.Services.AddHttpClient<GoogleReverseGeocodingService>();
 builder.Services.AddSingleton<IReverseGeocodingService>(sp =>
-    sp.GetRequiredService<RedisCachedGeocodingService>());
+{
+    var inner = (IReverseGeocodingService)sp.GetRequiredService<RedisCachedGeocodingService>();
+    var geocodeRepo = sp.GetRequiredService<GeocodeLocationRepository>();
+    var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(GoogleReverseGeocodingService));
+    var apiKey = builder.Configuration["Google:MapsApiKey"] ?? string.Empty;
+    var logger = sp.GetRequiredService<ILogger<GoogleReverseGeocodingService>>();
+    return new GoogleReverseGeocodingService(inner, geocodeRepo, httpClient, apiKey, logger);
+});
 
 // ── SQL Server (Dapper — only for warm-up reads and batch writes) ─────────────
 
@@ -122,6 +131,24 @@ builder.Services.AddSingleton<TelemetryEnrichmentOrchestrator>();
 // ── SqlBatch Options ──────────────────────────────────────────────────────────
 
 builder.Services.Configure<SqlBatchOptions>(builder.Configuration.GetSection("SqlBatch"));
+
+// ── Dead-Letter Reprocessor ───────────────────────────────────────────────
+
+builder.Services.AddHostedService(sp =>
+    new DeadLetterReprocessorService(
+        sp.GetRequiredService<ServiceBusClient>(),
+        rawChannel,
+        sp.GetRequiredService<ILogger<DeadLetterReprocessorService>>(),
+        builder.Configuration["Azure:ServiceBus:DeadLetterQueue"] ?? "e4.dlq.device-telemetry"));
+
+// ── Outbox Publisher ──────────────────────────────────────────────────────
+
+builder.Services.AddHostedService(sp =>
+    new OutboxPublisherHostedService(
+        sqlConnectionString,
+        sp.GetRequiredService<ServiceBusClient>(),
+        builder.Configuration["Azure:ServiceBus:OutboxTopic"] ?? "e4.events.telemetry-processed",
+        sp.GetRequiredService<ILogger<OutboxPublisherHostedService>>()));
 
 // ── Pipeline Workers (order matters — warm-up must start before telemetry) ───
 

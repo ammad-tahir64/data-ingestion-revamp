@@ -172,6 +172,8 @@ public sealed class SqlBatchWriter
         table.Columns.Add("fuel", typeof(int));
         table.Columns.Add("dwell_time_start", typeof(DateTime));
         table.Columns.Add("dwell_time", typeof(long));
+        // NOTE: "excrusion" is intentionally misspelled to match the existing DB column names
+        // (excrusion_time_start, excrusion_time). Changing the DB column names is out of scope.
         table.Columns.Add("excrusion_time_start", typeof(DateTime));
         table.Columns.Add("excrusion_time", typeof(long));
         table.Columns.Add("moves_in_last30days", typeof(int));

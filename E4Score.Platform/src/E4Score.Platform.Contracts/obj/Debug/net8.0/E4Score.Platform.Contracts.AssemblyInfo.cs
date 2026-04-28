@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("E4Score.Platform.Contracts")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4b65dabd7b7a481041442817cb4a10adcbe625f0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+688ccabccc04ac970f552d094cd93e84a8b8c21c")]
 [assembly: System.Reflection.AssemblyProductAttribute("E4Score.Platform.Contracts")]
 [assembly: System.Reflection.AssemblyTitleAttribute("E4Score.Platform.Contracts")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

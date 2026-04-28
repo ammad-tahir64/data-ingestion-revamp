@@ -1,5 +1,6 @@
 using E4Score.Platform.Contracts.CacheEntries;
 using E4Score.Platform.Contracts.Interfaces;
+using NetTopologySuite;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.IO;
 
@@ -12,7 +13,7 @@ namespace E4Score.Platform.Domain.Services;
 public sealed class GeofenceEvaluationService : IGeofenceEvaluationService
 {
     private static readonly GeometryFactory _geometryFactory = new(new PrecisionModel(), 4326);
-    private static readonly WKTReader _wktReader = new(_geometryFactory);
+    private static readonly WKTReader _wktReader = new(NtsGeometryServices.Instance);
 
     public GeofenceCacheEntry? Evaluate(double latitude, double longitude,
         IReadOnlyList<GeofenceCacheEntry> geofences)

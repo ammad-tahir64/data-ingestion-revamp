@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/E4Score.Platform.Contracts/E4Score.Platform.Contracts.csproj" />
+    <Project Path="src/E4Score.Platform.Domain/E4Score.Platform.Domain.csproj" />
+    <Project Path="src/E4Score.Platform.Infrastructure/E4Score.Platform.Infrastructure.csproj" />
+    <Project Path="src/E4Score.Platform.Worker/E4Score.Platform.Worker.csproj" />
+  </Folder>
+</Solution>

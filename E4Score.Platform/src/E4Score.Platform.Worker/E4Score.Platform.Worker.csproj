@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-E4Score.Platform.Worker-c64b6b3c-e269-48aa-b8f6-cbd83cadf3c2</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AspNetCore.HealthChecks.Redis" Version="8.0.1" />
+    <PackageReference Include="AspNetCore.HealthChecks.SqlServer" Version="8.0.3" />
+    <PackageReference Include="Azure.Messaging.EventHubs" Version="5.11.5" />
+    <PackageReference Include="Azure.Messaging.EventHubs.Processor" Version="5.11.5" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.22.2" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="8.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="8.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="8.12.0" />
+    <PackageReference Include="Polly.Extensions" Version="8.5.2" />
+    <PackageReference Include="StackExchange.Redis" Version="2.8.24" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\E4Score.Platform.Contracts\E4Score.Platform.Contracts.csproj" />
+    <ProjectReference Include="..\E4Score.Platform.Domain\E4Score.Platform.Domain.csproj" />
+    <ProjectReference Include="..\E4Score.Platform.Infrastructure\E4Score.Platform.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

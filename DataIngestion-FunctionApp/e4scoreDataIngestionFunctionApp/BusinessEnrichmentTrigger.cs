@@ -1,40 +1,38 @@
 using System;
 using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using e4scoreDataIngestionFunctionApp.Models.Enum;
 using e4scoreDataIngestionFunctionApp.Models.RequestModels;
+using e4scoreDataIngestionFunctionApp.Models;
+using e4scoreDataIngestionFunctionApp.Interfaces;
 using Newtonsoft.Json;
 using System.Collections.Generic;
-using e4scoreDataIngestionFunctionApp.Models.DomainModels;
-using e4scoreDataIngestionFunctionApp.Models;
-using e4scoreDataIngestionFunctionApp.Services;
 using Dapper;
 using Microsoft.Data.SqlClient;
 using SysTask = System.Threading.Tasks.Task;
 
 namespace e4scoreDataIngestionFunctionApp
 {
-    public class DeviceProcessingQueueTrigger
+    public class BusinessEnrichmentTrigger
     {
         private readonly string _connectionString;
-        private readonly IE4EAIQueue _e4EAIQueue;
-        private readonly ILogger<DeviceProcessingQueueTrigger> _logger;
+        private readonly IEaiQueueSender _eaiQueueSender;
+        private readonly ILogger<BusinessEnrichmentTrigger> _logger;
 
-        public DeviceProcessingQueueTrigger(
-            IE4EAIQueue e4EAIQueue,
-            ILogger<DeviceProcessingQueueTrigger> logger)
+        public BusinessEnrichmentTrigger(
+            IEaiQueueSender eaiQueueSender,
+            ILogger<BusinessEnrichmentTrigger> logger)
         {
-            _e4EAIQueue = e4EAIQueue;
+            _eaiQueueSender = eaiQueueSender;
             _logger = logger;
-            _connectionString = Environment.GetEnvironmentVariable("SqlConnection")
-                ?? throw new InvalidOperationException("SqlConnection environment variable is not set.");
+            _connectionString = Environment.GetEnvironmentVariable(ApplicationSettings.SqlConnection)
+                ?? throw new InvalidOperationException($"Environment variable '{ApplicationSettings.SqlConnection}' is not set.");
         }
 
-        [Function("DeviceProcessingQueueTrigger")]
+        [Function(ApplicationSettings.BusinessEnrichmentFunctionName)]
         public async SysTask Run(
-            [ServiceBusTrigger(ApplicationSettings.DeviceProcessingQueueName, Connection = ApplicationSettings.MaTrackQueueConnection)]
+            [ServiceBusTrigger(ApplicationSettings.BusinessEnrichmentQueueName, Connection = ApplicationSettings.MaTrackQueueConnection)]
             string myQueueItem,
             CancellationToken ct)
         {
@@ -48,9 +46,8 @@ namespace e4scoreDataIngestionFunctionApp
             var watch = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                _logger.LogWarning(
-                    "Device Processing Function App Started IMEI: {Imei}",
-                    deviceProcessing.IMEI);
+                _logger.LogWarning("[{Function}] Started — IMEI: {Imei}",
+                    ApplicationSettings.BusinessEnrichmentFunctionName, deviceProcessing.IMEI);
 
                 var eztrackDevice = await connection.QueryFirstOrDefaultAsync(
                     "SELECT TOP 1 id, version FROM eztrack_device WHERE imei = @imei",
@@ -283,23 +280,23 @@ namespace e4scoreDataIngestionFunctionApp
                 }
                 else
                 {
-                    _logger.LogWarning("Device with IMEI: {Imei} not found", deviceProcessing.IMEI);
+                    _logger.LogWarning("[{Function}] Device not found — IMEI: {Imei}",
+                        ApplicationSettings.BusinessEnrichmentFunctionName, deviceProcessing.IMEI);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[Device Processing] SQL Exception for IMEI: {Imei}", deviceProcessing.IMEI);
+                _logger.LogError(ex, "[{Function}] SQL exception — IMEI: {Imei}",
+                    ApplicationSettings.BusinessEnrichmentFunctionName, deviceProcessing.IMEI);
                 await transaction.RollbackAsync(ct);
                 throw;
             }
             finally
             {
                 watch.Stop();
-                _logger.LogWarning(
-                    "Device Processing ended — Execution Time: {ElapsedMs}ms {ElapsedSec}s",
-                    watch.ElapsedMilliseconds, watch.Elapsed.Seconds);
+                _logger.LogWarning("[{Function}] Done — {ElapsedMs}ms",
+                    ApplicationSettings.BusinessEnrichmentFunctionName, watch.ElapsedMilliseconds);
             }
         }
     }
 }
-

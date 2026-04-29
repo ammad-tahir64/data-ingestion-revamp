@@ -27,11 +27,11 @@ var host = new HostBuilder()
         services.AddScoped<ICalculateDwellTime, CalculateDwellTime>();
         services.AddScoped<ICalculateExcursionTime, CalculateExcursionTime>();
 
-        // ── Messaging / queue producers ──────────────────────────────────────
-        services.AddScoped<IDeviceProcessingQueue, DeviceProcessingQueue>();
-        services.AddScoped<IMessageSegmentationQueue, MessageSegmentationQueue>();
-        services.AddScoped<IE4EAIQueue, E4EAIQueue>();
-        services.AddScoped<IRebuildQueue, RebuildQueue>();
+        // ── Queue senders (Singleton — each holds a persistent ServiceBusClient) ─
+        services.AddSingleton<IBusinessEnrichmentQueueSender, BusinessEnrichmentQueueSender>();
+        services.AddSingleton<IMessageSegmentationQueueSender, MessageSegmentationQueueSender>();
+        services.AddSingleton<IEaiQueueSender, EaiQueueSender>();
+        services.AddSingleton<IDeviceTelemetryRebuildSender, DeviceTelemetryRebuildSender>();
     })
     .Build();
 

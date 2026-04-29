@@ -21,15 +21,13 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
 {
     public class MySQLDatabase : IMySQLDatabase
     {
-        private readonly IDeviceProcessingQueue _deviceProcessingQueue;
         private readonly IAzureRedisCache _azureRedisCache;
         private readonly string _connectionString;
 
-        public MySQLDatabase(IDeviceProcessingQueue deviceProcessingQueue, IAzureRedisCache azureRedisCache)
+        public MySQLDatabase(IAzureRedisCache azureRedisCache)
         {
-            _deviceProcessingQueue = deviceProcessingQueue;
             _azureRedisCache = azureRedisCache;
-            _connectionString = Environment.GetEnvironmentVariable("SqlConnection");
+            _connectionString = Environment.GetEnvironmentVariable(ApplicationSettings.SqlConnection);
         }
 
         public DeviceEvent GetDeviceEventsByIMEI(MatrackRequest matrackRequest, ILogger log)

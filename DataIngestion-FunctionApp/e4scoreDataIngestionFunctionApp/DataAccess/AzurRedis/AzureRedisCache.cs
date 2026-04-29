@@ -4,11 +4,9 @@ using e4scoreDataIngestionFunctionApp.Models.Enum;
 using e4scoreDataIngestionFunctionApp.Models.GeoLocation;
 using e4scoreDataIngestionFunctionApp.Models.Redis;
 using e4scoreDataIngestionFunctionApp.Models.RequestModels;
-using NetTopologySuite.Index.HPRtree;
 using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel.Design;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -17,324 +15,151 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
 {
     public class AzureRedisCache : IAzureRedisCache
     {
-        private Lazy<ConnectionMultiplexer> lazyRedisConnection = new Lazy<ConnectionMultiplexer>(() =>
+        private readonly Lazy<ConnectionMultiplexer> _lazyRedisConnection = new Lazy<ConnectionMultiplexer>(() =>
         {
-            string cacheConnection = Environment.GetEnvironmentVariable("AzureRedisConnection");
+            string cacheConnection = Environment.GetEnvironmentVariable(ApplicationSettings.AzureRedisConnection)
+                ?? throw new InvalidOperationException($"Environment variable '{ApplicationSettings.AzureRedisConnection}' is not set.");
             var options = ConfigurationOptions.Parse(cacheConnection);
-            options.SyncTimeout = 10000; // Set the timeout value to 10 seconds
+            options.SyncTimeout = 10000;
             return ConnectionMultiplexer.Connect(options);
         });
 
-        public ConnectionMultiplexer RedisConnection
-        {
-            get
-            {
-                return lazyRedisConnection.Value;
-            }
-        }
+        public ConnectionMultiplexer RedisConnection => _lazyRedisConnection.Value;
 
-        private IDatabase Connect()
-        {
-            return RedisConnection.GetDatabase();
-        }
+        private IDatabase Connect() => RedisConnection.GetDatabase();
 
         #region Device
         public void SetDeviceCache(Device device)
         {
-            var cache = Connect();
-            cache.StringSet(RedisKeys.DeviceKey + device.imei, JsonSerializer.Serialize(device), RedisKeys.ReferenceDataTtl);
+            Connect().StringSet(RedisKeys.DeviceKey + device.imei, JsonSerializer.Serialize(device), RedisKeys.ReferenceDataTtl);
         }
 
         public Device GetDeviceCache(string imei)
         {
-            var cache = Connect();
-            //cache.KeyDelete("RedisKeys.DeviceKey" + imei);
-            string cacheValue = cache.StringGet(RedisKeys.DeviceKey + imei);
-            if (cacheValue != null)
-            {
-                return JsonSerializer.Deserialize<Device>(cacheValue);
-            }
-            return null;
+            string value = Connect().StringGet(RedisKeys.DeviceKey + imei);
+            return value is not null ? JsonSerializer.Deserialize<Device>(value) : null;
         }
         #endregion
 
         #region Unidentified Devices
         public void SetUnidentifiedCache(string imei)
         {
-            if (!UnidentifiedCacheExists(imei)) 
-            {
-                var cache = Connect();
-                cache.StringSet(RedisKeys.UnidentifiedDeviceKey + imei, imei, RedisKeys.UnidentifiedDeviceTtl);
-            }
+            if (!UnidentifiedCacheExists(imei))
+                Connect().StringSet(RedisKeys.UnidentifiedDeviceKey + imei, imei, RedisKeys.UnidentifiedDeviceTtl);
         }
 
         public bool UnidentifiedCacheExists(string imei)
         {
-            var cache = Connect();
-            //cache.KeyDelete("RedisKeys.DeviceKey" + imei);
-            string cacheValue = cache.StringGet(RedisKeys.UnidentifiedDeviceKey + imei);
-            if (string.IsNullOrEmpty(cacheValue))
-            {
-                return false;
-            }
-            return true;
+            string value = Connect().StringGet(RedisKeys.UnidentifiedDeviceKey + imei);
+            return !string.IsNullOrEmpty(value);
         }
         #endregion
 
-        #region Matrack
-        public void SetMatrackCache(MatrackRequest matrackRequest)
+        #region Device Runtime (last telemetry)
+        public void SetDeviceRuntimeCache(MatrackRequest request)
         {
-            var cache = Connect();
-            cache.StringSet(RedisKeys.MatrackKey + matrackRequest.imei, JsonSerializer.Serialize(matrackRequest), RedisKeys.RuntimeStateTtl);
+            Connect().StringSet(RedisKeys.DeviceRuntimeKey + request.imei, JsonSerializer.Serialize(request), RedisKeys.RuntimeStateTtl);
         }
 
-        public MatrackRequest GetMatrackCache(string imei)
+        public MatrackRequest GetDeviceRuntimeCache(string imei)
         {
-            imei = imei.Trim();
-            var cache = Connect();
-
-            string cacheValue = cache.StringGet(RedisKeys.MatrackKey + imei);
-            if (cacheValue != null)
-            {
-                return JsonSerializer.Deserialize<MatrackRequest>(cacheValue);
-            }
-            return null;
+            string value = Connect().StringGet(RedisKeys.DeviceRuntimeKey + imei.Trim());
+            return value is not null ? JsonSerializer.Deserialize<MatrackRequest>(value) : null;
         }
         #endregion
 
-        #region DateOfLastMove
+        #region Date Of Last Move
         public void SetDateOfLastMoveCache(DateTime dateOfLastMove, string imei)
         {
-            var cache = Connect();
-            cache.StringSet(RedisKeys.ImeiKey + imei, Convert.ToString(dateOfLastMove), RedisKeys.RuntimeStateTtl);
+            Connect().StringSet(RedisKeys.DateOfLastMoveKey + imei, Convert.ToString(dateOfLastMove), RedisKeys.RuntimeStateTtl);
         }
 
         public string GetDateOfLastMoveCache(string imei)
         {
-            var cache = Connect();
-
-            string cacheValue = cache.StringGet(RedisKeys.ImeiKey + imei);
-            if (cacheValue != null)
-            {
-                return cacheValue;
-            }
-            return null;
+            string value = Connect().StringGet(RedisKeys.DateOfLastMoveKey + imei);
+            return value;
         }
         #endregion
 
         #region Event
-        public void SetEventCache(Event events)
+        public void SetEventCache(Event deviceEvent)
         {
-            if (events is null) 
-            {
-                return;
-            }
-            var cache = Connect();
-            cache.StringSet(RedisKeys.EventKey + events.imei, JsonSerializer.Serialize(events), RedisKeys.RuntimeStateTtl);
+            if (deviceEvent is null) return;
+            Connect().StringSet(RedisKeys.EventKey + deviceEvent.imei, JsonSerializer.Serialize(deviceEvent), RedisKeys.RuntimeStateTtl);
         }
 
         public Event GetEventCache(string imei)
         {
-            var cache = Connect();
-            //cache.KeyDelete("event_" + imei);
-
-            string cacheValue = cache.StringGet(RedisKeys.EventKey + imei);
-            if (cacheValue != null)
-            {
-                return JsonSerializer.Deserialize<Event>(cacheValue);
-            }
-            return null;
+            string value = Connect().StringGet(RedisKeys.EventKey + imei);
+            return value is not null ? JsonSerializer.Deserialize<Event>(value) : null;
         }
         #endregion
 
-        #region LastMoves
-        public void SetMovesInLastNDaysCache(List<LastMoveDays> lastMoveDays, string imei)
+        #region Moves In Last N Days
+        public void SetMovesInLastNDaysCache(LastMovesInNDays lastMovesInNDays, string imei)
         {
-            if (lastMoveDays is null)
-            {
-                return;
-            }
-            var cache = Connect();
-            int isStart = 1;
-            int isEnd = 1;
-            foreach (var item in lastMoveDays.OrderBy(a => a.serial_number))
-            {
-                lastMoveDays[0].StartKey = isStart;
-                lastMoveDays.LastOrDefault().Endkey = isEnd;
-                item.imei = imei;
-                object value = JsonSerializer.Serialize(item);
-                cache.HashSet($"{RedisKeys.MoveInNOfDays}{imei}", new HashEntry[]
-                {
-                  new HashEntry(item.serial_number.ToString(), JsonSerializer.Serialize(item))
-                });
-            }
+            if (lastMovesInNDays is null) return;
+            Connect().StringSet(RedisKeys.MovesInNDaysKey + imei, JsonSerializer.Serialize(lastMovesInNDays), RedisKeys.RuntimeStateTtl);
         }
 
-    public void SetMovesInLastNDaysCacheFromEvent(LastMovesInNDays lastMovesInNDays, string imei)
-    {
-      if (lastMovesInNDays is null)
-      {
-        return;
-      }
-      var cache = Connect(); 
-      cache.StringSet(RedisKeys.MoveInNOfDays + imei, JsonSerializer.Serialize(lastMovesInNDays), RedisKeys.RuntimeStateTtl); 
-    }
-
-
-    public void updateMovesInLastNDaysCache(List<LastMoveDays> lastMoveDays, MatrackRequest matrackRequest, ulong isMove = 1)
+        public LastMovesInNDays GetMovesInLastNDaysCache(string imei)
         {
-            var cache = Connect();
-            if (lastMoveDays.Count >= 90)
-            { 
-                int next = 0;
-                for (int i = 0; i <= lastMoveDays.Count - 1; i++)
-                {
-                    if (lastMoveDays[i].StartKey == 1)
-                    {
-                        cache.HashDelete($"{RedisKeys.MoveInNOfDays}{matrackRequest.imei}", lastMoveDays[i].serial_number.ToString());
-                        next = i + 1;
-                        lastMoveDays[next].StartKey = 1;
-                        break;
-                    }
-                }
-            }
-            var lastEntry = lastMoveDays.Where(a => a.Endkey == 1).FirstOrDefault();
-            var lastEntryKey  = lastEntry.serial_number + 1;
-            lastEntry.Endkey = 0;
-
-
-            cache.HashSet("lastMoveDays_" + matrackRequest.imei, new HashEntry[] { new HashEntry($"{lastEntry.serial_number}", JsonSerializer.Serialize(lastEntry)) });
-            cache.HashSet("lastMoveDays_" + matrackRequest.imei, new HashEntry[] { new HashEntry($"{lastEntryKey}", JsonSerializer.Serialize(lastEntry)) });
-
-            LastMoveDays lastMove = new LastMoveDays
-            {
-                imei = matrackRequest.imei,
-                source_timestamp = matrackRequest.timestamp,
-                is_move = isMove,
-                StartKey = 0,
-                Endkey = 1,
-                serial_number = lastEntryKey,
-            };
-            cache.HashSet($"{RedisKeys.MoveInNOfDays}{matrackRequest.imei}", new HashEntry[]
-            {
-                new HashEntry(lastMove.serial_number, JsonSerializer.Serialize(lastMove))
-            });
+            string value = Connect().StringGet(RedisKeys.MovesInNDaysKey + imei);
+            return value is not null ? JsonSerializer.Deserialize<LastMovesInNDays>(value) : null;
         }
+        #endregion
 
-        public List<LastMoveDays> GetMovesInLastNDaysCache(string imei)
-        {
-            var cache = Connect();
-            List<LastMoveDays> lastMoveDays = new List<LastMoveDays>();
-            var cacheValue = cache.HashKeys(RedisKeys.MoveInNOfDays + imei);
-
-            //foreach (var entry in cacheValue)
-            //{
-            //    cache.HashDelete(RedisKeys.MoveInNOfDays + imei, entry);
-            //    Console.WriteLine($"hash key deleted : {entry}");
-            //}
-
-            var latMoveDays = cache.HashGetAll(RedisKeys.MoveInNOfDays + imei).Select(lastMoveCache => Newtonsoft.Json.JsonConvert.DeserializeObject<LastMoveDays>(lastMoveCache.Value)).OrderBy(x => x.source_timestamp).ToList();
-
-            if (!latMoveDays.Any()) 
-            {
-                return null;
-            }
-
-            return  latMoveDays;
-        }
-
-
-    public LastMovesInNDays GetMovesInLastNDaysCacheNew(string imei)
-    {
-      var cache = Connect();
-      //cache.KeyDelete("event_" + imei);
-
-      string latMoveDays = cache.StringGet(RedisKeys.MoveInNOfDays + imei);
-      if (latMoveDays != null)
-      {
-        return JsonSerializer.Deserialize<LastMovesInNDays>(latMoveDays);
-      }
-      return null;
-
-     }
-
-
-    #endregion
-
-    #region Dwell time
-
-    public HashEntry[] GetAllLocationsByComapnyIdCache(string companyId)
-        {
-            var cache = Connect();
-
-            var locations = cache.HashGetAll($"locations_{companyId}");
-                       
-            return locations;
-        }
+        #region Dwell Time
         public void SetDwellTimeCache(DwellTime dwellTime)
         {
-            var cache = Connect();
-
-            cache.StringSet("dwellTime_" + dwellTime.Imei, System.Text.Json.JsonSerializer.Serialize(dwellTime));
+            Connect().StringSet(RedisKeys.DwellTimeKey + dwellTime.Imei, JsonSerializer.Serialize(dwellTime), RedisKeys.RuntimeStateTtl);
         }
 
         public DwellTime GetDwellTimeCache(string imei)
         {
-            var cache = Connect();
-
-            string cacheValue = cache.StringGet("dwellTime_" + imei);
-            if (cacheValue != null)
-            {
-                return System.Text.Json.JsonSerializer.Deserialize<DwellTime>(cacheValue);
-            }
-            return null;
+            string value = Connect().StringGet(RedisKeys.DwellTimeKey + imei);
+            return value is not null ? JsonSerializer.Deserialize<DwellTime>(value) : null;
         }
         #endregion
 
-        #region Excursion time
-
-        public void SetExcursionTimeCache(ExcursionTime dwellTime)
+        #region Excursion Time
+        public void SetExcursionTimeCache(ExcursionTime excursionTime)
         {
-            var cache = Connect();
-            cache.StringSet("excursionTime_" + dwellTime.Imei, JsonSerializer.Serialize(dwellTime));
+            Connect().StringSet(RedisKeys.ExcursionTimeKey + excursionTime.Imei, JsonSerializer.Serialize(excursionTime), RedisKeys.RuntimeStateTtl);
         }
+
         public ExcursionTime GetExcursionTimeCache(string imei)
         {
-            var cache = Connect();
-            string cacheValue = cache.StringGet("excursionTime_" + imei);
-            if (cacheValue != null)
-            {
-                return JsonSerializer.Deserialize<ExcursionTime>(cacheValue);
-            }
-            return null;
+            string value = Connect().StringGet(RedisKeys.ExcursionTimeKey + imei);
+            return value is not null ? JsonSerializer.Deserialize<ExcursionTime>(value) : null;
         }
         #endregion
 
         #region Asset Profile
-
-        public void SetAssetProfileCache(string imei, DeviceDwellTime deviceDwellTime, DeviceExcursionTime deviceExcursionTime , long idleTime)
+        public void SetAssetProfileCache(string imei, DeviceDwellTime deviceDwellTime, DeviceExcursionTime deviceExcursionTime, long idleTime)
         {
-            AssetProfile assetProfile = new AssetProfile
+            var profile = new AssetProfile
             {
                 DeviceDwellTime = deviceDwellTime,
                 DeviceExcursionTime = deviceExcursionTime,
-                IdleTime= idleTime
-
+                IdleTime = idleTime
             };
-            var cache = Connect();
-            cache.StringSet("assetProfile_" + imei, JsonSerializer.Serialize(assetProfile));
+            Connect().StringSet(RedisKeys.AssetProfileKey + imei, JsonSerializer.Serialize(profile), RedisKeys.RuntimeStateTtl);
         }
+
         public AssetProfile GetAssetProfileCache(string imei)
         {
-            var cache = Connect();
-            string cacheValue = cache.StringGet("assetProfile_" + imei);
-            if (cacheValue != null)
-            {
-                return JsonSerializer.Deserialize<AssetProfile>(cacheValue);
-            }
-            return null;
+            string value = Connect().StringGet(RedisKeys.AssetProfileKey + imei);
+            return value is not null ? JsonSerializer.Deserialize<AssetProfile>(value) : null;
         }
         #endregion
 
+        #region Geofence Locations
+        public HashEntry[] GetAllLocationsByCompanyIdCache(string companyId)
+        {
+            return Connect().HashGetAll(RedisKeys.LocationsKey + companyId);
+        }
+        #endregion
     }
 }
+

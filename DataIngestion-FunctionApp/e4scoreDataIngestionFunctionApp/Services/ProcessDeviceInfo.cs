@@ -28,16 +28,22 @@ namespace e4scoreDataIngestionFunctionApp.Services
         private readonly IReverseGeoCoding _reverseGeoCoding;
         private readonly ICalculateDwellTime _calculateDwellTime;
         private readonly ICalculateExcursionTime _calculateExcursionTime;
-        private readonly IDeviceProcessingQueue _deviceProcessingQueue;
-        public ProcessDeviceInfo(IMySQLDatabase mySQLDatabase, IAzureRedisCache azureRedisCache, IReverseGeoCoding reverseGeoCoding,
-            ICalculateDwellTime calculateDwellTime, ICalculateExcursionTime calculateExcursionTime, IDeviceProcessingQueue deviceProcessingQueue)
+        private readonly IBusinessEnrichmentQueueSender _businessEnrichmentQueue;
+
+        public ProcessDeviceInfo(
+            IMySQLDatabase mySQLDatabase,
+            IAzureRedisCache azureRedisCache,
+            IReverseGeoCoding reverseGeoCoding,
+            ICalculateDwellTime calculateDwellTime,
+            ICalculateExcursionTime calculateExcursionTime,
+            IBusinessEnrichmentQueueSender businessEnrichmentQueue)
         {
             _mySQLDatabase = mySQLDatabase;
             _azureRedisCache = azureRedisCache;
             _reverseGeoCoding = reverseGeoCoding;
             _calculateDwellTime = calculateDwellTime;
             _calculateExcursionTime = calculateExcursionTime;
-            _deviceProcessingQueue = deviceProcessingQueue;
+            _businessEnrichmentQueue = businessEnrichmentQueue;
         }
 
         /// <summary>
@@ -52,9 +58,9 @@ namespace e4scoreDataIngestionFunctionApp.Services
             {
                 LastMovesInNDays movesInNDays = new LastMovesInNDays();
 
-                MatrackRequest lastLatLong = _azureRedisCache.GetMatrackCache(matrackRequest.imei);
+                MatrackRequest lastLatLong = _azureRedisCache.GetDeviceRuntimeCache(matrackRequest.imei);
 
-                var cachedtLastMoves = _azureRedisCache.GetMovesInLastNDaysCacheNew(matrackRequest.imei);
+                var cachedtLastMoves = _azureRedisCache.GetMovesInLastNDaysCache(matrackRequest.imei);
 
                 var cachedEvent = _azureRedisCache.GetEventCache(matrackRequest.imei);
 
@@ -80,13 +86,11 @@ namespace e4scoreDataIngestionFunctionApp.Services
                     }
                     _azureRedisCache.SetEventCache(DeviceEvent.Event);
                     cachedEvent = _azureRedisCache.GetEventCache(matrackRequest.imei);
-                    _azureRedisCache.SetMovesInLastNDaysCacheFromEvent(DeviceEvent.lastMovesInNDays, matrackRequest.imei);
-                    ///_azureRedisCache.SetMovesInLastNDaysCache(DeviceEvent.LastMoveDays, matrackRequest.imei); 
-                    ///cachedtLastMoves = _azureRedisCache.GetMovesInLastNDaysCache(matrackRequest.imei); 
+                    _azureRedisCache.SetMovesInLastNDaysCache(DeviceEvent.lastMovesInNDays, matrackRequest.imei);
                 }
                 _azureRedisCache.SetEventCache(cachedEvent);
 
-                _azureRedisCache.SetMatrackCache(matrackRequest);
+                _azureRedisCache.SetDeviceRuntimeCache(matrackRequest);
 
                 DateTime currentJSONdate = Convert.ToDateTime(matrackRequest.timestamp).Date;
                 DateTime? previousJSONdate = DateTime.MinValue;
@@ -109,20 +113,12 @@ namespace e4scoreDataIngestionFunctionApp.Services
                 {
                     //update cache i.e remove first and add into last
                     //set updated cache
-                    ////if (cachedtLastMoves != null)
-                    ////{
-                    ////
-                    //////_azureRedisCache.updateMovesInLastNDaysCache(cachedtLastMoves, matrackRequest, 1); 
-                    ////}
-                    //var getLastMoves = _azureRedisCache.GetMovesInLastNDaysCache(matrackRequest.imei);
-                    var getLastMoves = _azureRedisCache.GetMovesInLastNDaysCacheNew(matrackRequest.imei);
+                    var getLastMoves = _azureRedisCache.GetMovesInLastNDaysCache(matrackRequest.imei);
                     if (getLastMoves != null)
                     {
                         movesInNDays = PopulateMovesInNDays(getLastMoves, matrackRequest);
-                        _azureRedisCache.SetMovesInLastNDaysCacheFromEvent(movesInNDays, matrackRequest.imei);
+                        _azureRedisCache.SetMovesInLastNDaysCache(movesInNDays, matrackRequest.imei);
                     }
-
-                    distanceFromPreviousEvent = GeoDistance.Distance(Convert.ToDouble(lastLatLong.location.primary.latitude), Convert.ToDouble(lastLatLong.location.primary.longitude), matrackRequest.location.primary.latitude, matrackRequest.location.primary.longitude);
                     is_move = 1;
                     idelTime = 0;
                     _azureRedisCache.SetDateOfLastMoveCache(matrackRequest.timestamp, matrackRequest.imei);
@@ -130,12 +126,11 @@ namespace e4scoreDataIngestionFunctionApp.Services
                 }
                 else
                 {
-                    //var getLastMoves = _azureRedisCache.GetMovesInLastNDaysCache(matrackRequest.imei);
-                    var getLastMoves = _azureRedisCache.GetMovesInLastNDaysCacheNew(matrackRequest.imei);
+                    var getLastMoves = _azureRedisCache.GetMovesInLastNDaysCache(matrackRequest.imei);
                     if (getLastMoves != null)
                     {
                         movesInNDays = PopulateMovesInNDays(getLastMoves, matrackRequest);
-                        _azureRedisCache.SetMovesInLastNDaysCacheFromEvent(movesInNDays, matrackRequest.imei);
+                        _azureRedisCache.SetMovesInLastNDaysCache(movesInNDays, matrackRequest.imei);
 
                     }
                     distanceFromPreviousEvent = 0;
@@ -217,7 +212,7 @@ namespace e4scoreDataIngestionFunctionApp.Services
                 _azureRedisCache.SetAssetProfileCache(matrackRequest.imei, deviceProcessing.DwellTime, deviceProcessing.ExcursionTime, idelTime);
 
                 //Send consolidated model of DeviceProcessing to the device processing queue for save in the database
-                return await _deviceProcessingQueue.SendAsync(deviceProcessing, log);
+                return await _businessEnrichmentQueue.SendAsync(deviceProcessing, log);
             }
             catch (Exception ex)
             {

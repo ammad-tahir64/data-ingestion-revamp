@@ -20,17 +20,23 @@ namespace e4scoreDataIngestionFunctionApp.Models.Enum
         public const string AzureRedisConnection = "AzureRedisConnection";
         public const string MaTrackQueueConnection = "MaTrackQueueConnection";
         public const string MaTrackQueueConnectionRebuild = "MaTrackQueueConnectionRebuild";
-        public const string E4scoreEaiQueue = "E4scoreEaiQueue";
+        public const string E4scoreEaiQueueConnection = "E4scoreEaiQueue";
 
         // ── Azure Service Bus queue names (proposal §B naming convention) ───────
-        /// <summary>e4.ingestion.device-telemetry — raw telemetry from IoT devices (was: matrack)</summary>
-        public const string MatrackQueueName = "e4.ingestion.device-telemetry";
+        /// <summary>e4.ingestion.device-telemetry — raw telemetry from IoT devices</summary>
+        public const string DeviceTelemetryQueueName = "e4.ingestion.device-telemetry";
 
-        /// <summary>e4.processing.message-segmentation — payload parsing stage (was: messagesegmentation)</summary>
+        /// <summary>e4.processing.message-segmentation — payload parsing stage</summary>
         public const string MessageSegmentationQueueName = "e4.processing.message-segmentation";
 
-        /// <summary>e4.processing.business-enrichment — enrichment + dwell/excursion calc (was: deviceprocessing)</summary>
-        public const string DeviceProcessingQueueName = "e4.processing.business-enrichment";
+        /// <summary>e4.processing.business-enrichment — enrichment + dwell/excursion calc</summary>
+        public const string BusinessEnrichmentQueueName = "e4.processing.business-enrichment";
+
+        /// <summary>globaltracker — raw telemetry from GlobalTracker IoT devices</summary>
+        public const string GlobalTrackerQueueName = "globaltracker";
+
+        /// <summary>e4score-eai-queue — outbound EAI integration queue</summary>
+        public const string EaiQueueName = "e4score-eai-queue";
 
         /// <summary>e4.persistence.batch-writer — final bulk-write to SQL Server</summary>
         public const string BatchWriterQueueName = "e4.persistence.batch-writer";
@@ -42,6 +48,9 @@ namespace e4scoreDataIngestionFunctionApp.Models.Enum
         public const string DeadLetterEnrichmentQueueName = "e4.dlq.business-enrichment";
 
         // ── Azure Function names ─────────────────────────────────────────────────
-        public const string MatrackFunctionName = "MatrackQueueTrigger";
+        public const string DeviceTelemetryFunctionName = "DeviceTelemetryTrigger";
+        public const string MessageSegmentationFunctionName = "MessageSegmentationTrigger";
+        public const string BusinessEnrichmentFunctionName = "BusinessEnrichmentTrigger";
+        public const string GlobalTrackerFunctionName = "GlobalTrackerTrigger";
     }
 }

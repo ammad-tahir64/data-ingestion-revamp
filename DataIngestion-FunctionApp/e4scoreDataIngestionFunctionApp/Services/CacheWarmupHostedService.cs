@@ -117,7 +117,7 @@ namespace e4scoreDataIngestionFunctionApp.Services
                     if (string.IsNullOrWhiteSpace(device.imei))
                         continue;
 
-                    string key = RedisKeys.DeviceKey + device.imei;
+                string key = RedisKeys.DeviceKey + device.imei;
                     string value = JsonSerializer.Serialize(device);
 
                     // Fire-and-forget inside the batch — all tasks are awaited together below.

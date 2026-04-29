@@ -4,7 +4,6 @@ using e4scoreDataIngestionFunctionApp.Interfaces;
 using e4scoreDataIngestionFunctionApp.Models;
 using e4scoreDataIngestionFunctionApp.Services;
 using Microsoft.Azure.Functions.Extensions.DependencyInjection;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System.Configuration;
 
@@ -17,8 +16,6 @@ namespace FunctionApp
         public override void Configure(IFunctionsHostBuilder builder)
         {
             ConfigureServices(builder.Services);
-            builder.Services.AddDbContext<ezcheckinContext>();
-
         }
 
         public void ConfigureServices(IServiceCollection services)

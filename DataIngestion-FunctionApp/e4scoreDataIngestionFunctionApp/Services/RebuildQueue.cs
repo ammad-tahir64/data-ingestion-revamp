@@ -32,7 +32,7 @@ namespace e4scoreDataIngestionFunctionApp.Services
             catch (Exception ex)
             {
                 log.LogError($"Exception on sending matrack Queue: {matrackRequest.imei} Exception {ex.Message} --------------------------------");
-                throw ex;
+                throw;
             }
             finally
             {

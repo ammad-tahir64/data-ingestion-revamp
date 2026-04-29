@@ -9,6 +9,7 @@ namespace e4scoreDataIngestionFunctionApp.Models.Enum
     public static class ApplicationSettings
     {
         public const string MySQLConnection = "MySQLConnection";
+        public const string SqlConnection = "SqlConnection";
         public const string AzureRedisConnection = "AzureRedisConnection";
         public const string MaTrackQueueConnection = "MaTrackQueueConnection";
         public const string MatrackQueueName = "matrack";

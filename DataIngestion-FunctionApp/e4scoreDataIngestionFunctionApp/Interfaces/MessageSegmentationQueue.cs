@@ -33,7 +33,7 @@ namespace e4scoreDataIngestionFunctionApp.Interfaces
             catch (Exception ex)
             {
                 log.LogError($"Exception on sending message segmentation Queue: {matrackRequest.imei} Exception {ex.Message} --------------------------------");
-                throw ex;
+                throw;
             }
             finally
             {

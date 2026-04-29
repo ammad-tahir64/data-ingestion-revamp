@@ -3,8 +3,6 @@ using e4scoreDataIngestionFunctionApp.Interfaces;
 using e4scoreDataIngestionFunctionApp.Models;
 using e4scoreDataIngestionFunctionApp.Models.Enum;
 using e4scoreDataIngestionFunctionApp.Models.RequestModels;
-using GoogleMapsApi.Entities.Directions.Response;
-using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Text.Json;
@@ -32,7 +30,7 @@ namespace e4scoreDataIngestionFunctionApp.Services
             catch (Exception ex)
             {
                 log.LogError($"Exception on sending deviceprocessing Queue: {deviceProcessing.IMEI} Exception {ex.Message} --------------------------------");
-                throw ex;
+                throw;
             }
             finally
             {

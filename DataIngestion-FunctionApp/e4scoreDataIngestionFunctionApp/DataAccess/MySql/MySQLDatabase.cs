@@ -98,7 +98,7 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
             catch (Exception ex)
             {
                 log.LogInformation($"[GetDeviceEvents] SQL Exception : {ex.Message} --------------------------------");
-                throw ex;
+                throw;
             }
         }
 
@@ -160,7 +160,7 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
             catch (Exception ex)
             {
                 log.LogInformation($"[GetGeocodeLocation] SQL Exception : {ex.Message} --------------------------------");
-                throw ex;
+                throw;
             }
         }
 
@@ -199,7 +199,7 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
             catch (Exception ex)
             {
                 log.LogInformation($"[SaveGeocodeLocation] SQL Exception : {ex.Message} --------------------------------");
-                throw ex;
+                throw;
             }
         }
 

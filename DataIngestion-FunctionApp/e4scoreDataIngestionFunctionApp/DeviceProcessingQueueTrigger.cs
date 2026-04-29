@@ -1,6 +1,7 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Azure.WebJobs;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using e4scoreDataIngestionFunctionApp.Models.Enum;
 using e4scoreDataIngestionFunctionApp.Models.RequestModels;
@@ -11,7 +12,7 @@ using e4scoreDataIngestionFunctionApp.Models;
 using e4scoreDataIngestionFunctionApp.Services;
 using Dapper;
 using Microsoft.Data.SqlClient;
-using Task = System.Threading.Tasks.Task;
+using SysTask = System.Threading.Tasks.Task;
 
 namespace e4scoreDataIngestionFunctionApp
 {
@@ -19,42 +20,50 @@ namespace e4scoreDataIngestionFunctionApp
     {
         private readonly string _connectionString;
         private readonly IE4EAIQueue _e4EAIQueue;
+        private readonly ILogger<DeviceProcessingQueueTrigger> _logger;
 
-        public DeviceProcessingQueueTrigger(IE4EAIQueue e4EAIQueue)
+        public DeviceProcessingQueueTrigger(
+            IE4EAIQueue e4EAIQueue,
+            ILogger<DeviceProcessingQueueTrigger> logger)
         {
             _e4EAIQueue = e4EAIQueue;
-            _connectionString = Environment.GetEnvironmentVariable("SqlConnection");
+            _logger = logger;
+            _connectionString = Environment.GetEnvironmentVariable("SqlConnection")
+                ?? throw new InvalidOperationException("SqlConnection environment variable is not set.");
         }
 
-        [FunctionName("DeviceProcessingQueueTrigger")]
-        public async Task Run([ServiceBusTrigger("deviceprocessing", Connection = ApplicationSettings.MaTrackQueueConnection)] string myQueueItem,
-            ILogger log)
+        [Function("DeviceProcessingQueueTrigger")]
+        public async SysTask Run(
+            [ServiceBusTrigger("deviceprocessing", Connection = ApplicationSettings.MaTrackQueueConnection)]
+            string myQueueItem,
+            CancellationToken ct)
         {
-            var deviceProcessing = JsonConvert.DeserializeObject<DeviceProcessing>(myQueueItem);
+            var deviceProcessing = JsonConvert.DeserializeObject<DeviceProcessing>(myQueueItem)!;
             deviceProcessing.MessageId = Guid.NewGuid().ToString();
 
-            using var connection = new SqlConnection(_connectionString);
-            connection.Open();
-            using var transaction = connection.BeginTransaction();
+            await using var connection = new SqlConnection(_connectionString);
+            await connection.OpenAsync(ct);
+            await using var transaction = await connection.BeginTransactionAsync(ct);
 
-            var watch = new System.Diagnostics.Stopwatch();
-            watch.Start();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                log.LogWarning($"Device Processing Function App Started IMEI : {deviceProcessing.IMEI} -----------------------------------------------------");
+                _logger.LogWarning(
+                    "Device Processing Function App Started IMEI: {Imei}",
+                    deviceProcessing.IMEI);
 
-                var eztrackDevice = connection.QueryFirstOrDefault(
+                var eztrackDevice = await connection.QueryFirstOrDefaultAsync(
                     "SELECT TOP 1 id, version FROM eztrack_device WHERE imei = @imei",
                     new { imei = deviceProcessing.IMEI },
                     transaction);
 
                 if (eztrackDevice != null)
                 {
-                    DateTime? dateOfLastMoveUpdated = null;
+                    DateTime? dateOfLastMoveUpdated;
 
                     if (deviceProcessing.IsMove == false)
                     {
-                        var lastEventDateOfLastMove = connection.QueryFirstOrDefault<DateTime?>(
+                        var lastEventDateOfLastMove = await connection.QueryFirstOrDefaultAsync<DateTime?>(
                             "SELECT TOP 1 date_of_last_move FROM eztrack_event WHERE imei = @imei ORDER BY id DESC",
                             new { imei = deviceProcessing.IMEI },
                             transaction);
@@ -66,7 +75,7 @@ namespace e4scoreDataIngestionFunctionApp
                         dateOfLastMoveUpdated = deviceProcessing.SourceTimestamp;
                     }
 
-                    long pingSensorId = connection.ExecuteScalar<long>(
+                    long pingSensorId = await connection.ExecuteScalarAsync<long>(
                         @"INSERT INTO ping_sensor (created, deleted, enabled, uuid, version, battery, temperature)
                           OUTPUT INSERTED.id
                           VALUES (GETUTCDATE(), 0, 1, @uuid, 1, @battery, @temperature)",
@@ -78,7 +87,7 @@ namespace e4scoreDataIngestionFunctionApp
                         },
                         transaction);
 
-                    long pingLocationId = connection.ExecuteScalar<long>(
+                    long pingLocationId = await connection.ExecuteScalarAsync<long>(
                         @"INSERT INTO ping_location (created, deleted, enabled, uuid, version, latitude, longitude)
                           OUTPUT INSERTED.id
                           VALUES (GETUTCDATE(), 0, 1, @uuid, 1, @latitude, @longitude)",
@@ -90,12 +99,12 @@ namespace e4scoreDataIngestionFunctionApp
                         },
                         transaction);
 
-                    string assetName = connection.QueryFirstOrDefault<string>(
+                    string assetName = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT TOP 1 asset_id FROM asset WHERE uuid = @uuid",
                         new { uuid = deviceProcessing.AssetUuid },
                         transaction);
 
-                    long eztrackEventId = connection.ExecuteScalar<long>(
+                    long eztrackEventId = await connection.ExecuteScalarAsync<long>(
                         @"INSERT INTO eztrack_event (
                             created, deleted, enabled, updated, uuid, version,
                             address, asset_uuid, city, date_of_last_move, direction,
@@ -155,7 +164,7 @@ namespace e4scoreDataIngestionFunctionApp
                         },
                         transaction);
 
-                    var eventDates = connection.QueryFirstOrDefault(
+                    var eventDates = await connection.QueryFirstOrDefaultAsync(
                         "SELECT MIN(created) AS StartDate, MAX(created) AS EndDate FROM eztrack_event WHERE imei = @imei",
                         new { imei = deviceProcessing.IMEI },
                         transaction);
@@ -171,7 +180,7 @@ namespace e4scoreDataIngestionFunctionApp
                     string latestState = string.IsNullOrEmpty(deviceProcessing.GeofenceState) ? deviceProcessing.State : deviceProcessing.GeofenceState;
                     string latestPostal = string.IsNullOrEmpty(deviceProcessing.GeofencePostal) ? deviceProcessing.Postal : deviceProcessing.GeofencePostal;
 
-                    connection.Execute(
+                    await connection.ExecuteAsync(
                         @"UPDATE eztrack_device SET
                             updated = GETUTCDATE(),
                             version = version + 1,
@@ -216,7 +225,7 @@ namespace e4scoreDataIngestionFunctionApp
                         },
                         transaction);
 
-                    connection.Execute(
+                    await connection.ExecuteAsync(
                         @"UPDATE asset SET
                             updated = GETUTCDATE(),
                             version = version + 1,
@@ -265,30 +274,32 @@ namespace e4scoreDataIngestionFunctionApp
                         },
                         transaction);
 
-                    connection.Execute(
+                    await connection.ExecuteAsync(
                         "INSERT INTO eztrack_device_events (eztrack_device_id, events_id) VALUES (@eztrackDeviceId, @eventsId)",
                         new { eztrackDeviceId = (long)eztrackDevice.id, eventsId = eztrackEventId },
                         transaction);
 
-                    transaction.Commit();
+                    await transaction.CommitAsync(ct);
                 }
                 else
                 {
-                    log.LogWarning($"Device with imei : {deviceProcessing.IMEI} not found #######################");
+                    _logger.LogWarning("Device with IMEI: {Imei} not found", deviceProcessing.IMEI);
                 }
             }
             catch (Exception ex)
             {
-                log.LogError($"[Device Processing] SQL Exception : {ex.Message}  --------------------------------");
-                transaction.Rollback();
-                throw new Exception(ex.Message);
+                _logger.LogError(ex, "[Device Processing] SQL Exception for IMEI: {Imei}", deviceProcessing.IMEI);
+                await transaction.RollbackAsync(ct);
+                throw;
             }
             finally
             {
-                log.LogWarning($"Function Execution Time (success): {watch.ElapsedMilliseconds} ms {watch.Elapsed.Seconds} sec ------------------------------------------------------");
-                log.LogWarning("Device processing ended ------------------------------------------------------");
-                log.LogWarning($" ");
+                watch.Stop();
+                _logger.LogWarning(
+                    "Device Processing ended — Execution Time: {ElapsedMs}ms {ElapsedSec}s",
+                    watch.ElapsedMilliseconds, watch.Elapsed.Seconds);
             }
         }
     }
 }
+

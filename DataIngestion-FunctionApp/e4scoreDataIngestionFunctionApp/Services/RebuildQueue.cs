@@ -18,7 +18,7 @@ namespace e4scoreDataIngestionFunctionApp.Services
         {
 
             ServiceBusClient serviceBusClient = new ServiceBusClient(Environment.GetEnvironmentVariable(ApplicationSettings.MaTrackQueueConnectionRebuild));
-            var sender = serviceBusClient.CreateSender("matrack");
+            var sender = serviceBusClient.CreateSender(ApplicationSettings.MatrackQueueName);
 
             try
             {

@@ -25,8 +25,7 @@ namespace e4scoreDataIngestionFunctionApp
         // Disabled via app setting: AzureWebJobs.GlobalTrackerQueueTrigger.Disabled = true
         [Function("GlobalTrackerQueueTrigger")]
         public async Task Run(
-            [ServiceBusTrigger("globaltracker", Connection = Models.Enum.ApplicationSettings.MaTrackQueueConnection)]
-            string myQueueItem,
+            [ServiceBusTrigger("globaltracker", Connection = Models.Enum.ApplicationSettings.MaTrackQueueConnection)]            string myQueueItem,
             CancellationToken ct)
         {
             var watch = System.Diagnostics.Stopwatch.StartNew();

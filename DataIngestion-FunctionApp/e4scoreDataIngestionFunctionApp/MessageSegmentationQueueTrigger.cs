@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using e4scoreDataIngestionFunctionApp.Interfaces;
 using e4scoreDataIngestionFunctionApp.Models.RequestModels;
+using e4scoreDataIngestionFunctionApp.Models.Enum;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
@@ -24,7 +25,7 @@ namespace e4scoreDataIngestionFunctionApp
 
         [Function("MessageSegmentationQueueTrigger")]
         public async Task Run(
-            [ServiceBusTrigger("messagesegmentation", Connection = "MaTrackQueueConnection")]
+            [ServiceBusTrigger(ApplicationSettings.MessageSegmentationQueueName, Connection = "MaTrackQueueConnection")]
             string myQueueItem,
             CancellationToken ct)
         {

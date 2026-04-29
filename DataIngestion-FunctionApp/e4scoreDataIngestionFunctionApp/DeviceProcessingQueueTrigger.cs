@@ -34,7 +34,7 @@ namespace e4scoreDataIngestionFunctionApp
 
         [Function("DeviceProcessingQueueTrigger")]
         public async SysTask Run(
-            [ServiceBusTrigger("deviceprocessing", Connection = ApplicationSettings.MaTrackQueueConnection)]
+            [ServiceBusTrigger(ApplicationSettings.DeviceProcessingQueueName, Connection = ApplicationSettings.MaTrackQueueConnection)]
             string myQueueItem,
             CancellationToken ct)
         {

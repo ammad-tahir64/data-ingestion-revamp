@@ -11,17 +11,23 @@ var host = new HostBuilder()
     .ConfigureFunctionsWorkerDefaults()
     .ConfigureServices(services =>
     {
-        // Data access
+        // ── Background services (run at startup, before trigger processing) ───
+        // CacheWarmupHostedService pre-loads active device reference data from
+        // SQL Server into Redis so the enrichment pipeline has zero SQL lookups
+        // for IMEI resolution (Architecture Proposal §D, Layer 1).
+        services.AddHostedService<CacheWarmupHostedService>();
+
+        // ── Data access ──────────────────────────────────────────────────────
         services.AddScoped<IMySQLDatabase, MySQLDatabase>();
         services.AddScoped<IAzureRedisCache, AzureRedisCache>();
 
-        // Business services
+        // ── Business services ────────────────────────────────────────────────
         services.AddScoped<IProcessDeviceInfo, ProcessDeviceInfo>();
         services.AddScoped<IReverseGeoCoding, ReverseGeoCoding>();
         services.AddScoped<ICalculateDwellTime, CalculateDwellTime>();
         services.AddScoped<ICalculateExcursionTime, CalculateExcursionTime>();
 
-        // Messaging / queue producers
+        // ── Messaging / queue producers ──────────────────────────────────────
         services.AddScoped<IDeviceProcessingQueue, DeviceProcessingQueue>();
         services.AddScoped<IMessageSegmentationQueue, MessageSegmentationQueue>();
         services.AddScoped<IE4EAIQueue, E4EAIQueue>();

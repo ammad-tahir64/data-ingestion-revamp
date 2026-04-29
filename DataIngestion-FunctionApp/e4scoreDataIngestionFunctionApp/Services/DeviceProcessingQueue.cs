@@ -17,7 +17,6 @@ namespace e4scoreDataIngestionFunctionApp.Services
 
             ServiceBusClient serviceBusClient = new ServiceBusClient(Environment.GetEnvironmentVariable(ApplicationSettings.MaTrackQueueConnection));
             var sender = serviceBusClient.CreateSender(ApplicationSettings.DeviceProcessingQueueName);
-
             try
             {
                 var messageToBe = JsonSerializer.Serialize(deviceProcessing);

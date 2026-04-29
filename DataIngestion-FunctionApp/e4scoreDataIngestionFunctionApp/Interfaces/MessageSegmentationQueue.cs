@@ -19,7 +19,7 @@ namespace e4scoreDataIngestionFunctionApp.Interfaces
         {
 
             ServiceBusClient serviceBusClient = new ServiceBusClient(Environment.GetEnvironmentVariable(ApplicationSettings.MaTrackQueueConnection));
-            var sender = serviceBusClient.CreateSender("messagesegmentation");
+            var sender = serviceBusClient.CreateSender(ApplicationSettings.MessageSegmentationQueueName);
 
             try
             {

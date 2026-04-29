@@ -31,7 +31,7 @@ namespace e4scoreDataIngestionFunctionApp.Services
             catch (Exception ex)
             {
                 log.LogError($"Exception on sending deviceprocessing Queue: {deviceProcessing.IMEI} Exception {ex.Message} --------------------------------");
-                throw ex;
+                throw;
             }
             finally
             {

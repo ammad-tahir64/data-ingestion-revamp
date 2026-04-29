@@ -1,9 +1,10 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using e4scoreDataIngestionFunctionApp.Interfaces;
 using e4scoreDataIngestionFunctionApp.Models.RequestModels;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Host;
+using e4scoreDataIngestionFunctionApp.Models.Enum;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
@@ -12,29 +13,39 @@ namespace e4scoreDataIngestionFunctionApp
     public class MessageSegmentationQueueTrigger
     {
         private readonly IProcessDeviceInfo _processDeviceInfo;
-        public MessageSegmentationQueueTrigger(IProcessDeviceInfo processDeviceInfo)
+        private readonly ILogger<MessageSegmentationQueueTrigger> _logger;
+
+        public MessageSegmentationQueueTrigger(
+            IProcessDeviceInfo processDeviceInfo,
+            ILogger<MessageSegmentationQueueTrigger> logger)
         {
             _processDeviceInfo = processDeviceInfo;
+            _logger = logger;
         }
-        [FunctionName("MessageSegmentationQueueTrigger")]
-        public async Task Run([ServiceBusTrigger("messagesegmentation", Connection = "MaTrackQueueConnection")]string myQueueItem, ILogger log)
+
+        [Function("MessageSegmentationQueueTrigger")]
+        public async Task Run(
+            [ServiceBusTrigger(ApplicationSettings.MessageSegmentationQueueName, Connection = "MaTrackQueueConnection")]
+            string myQueueItem,
+            CancellationToken ct)
         {
-            log.LogInformation($"Packet : {myQueueItem} -----------------------------------------------------");
-            var watch = new System.Diagnostics.Stopwatch();
-            watch.Start();
+            _logger.LogInformation("Packet: {Packet}", myQueueItem);
+            var watch = System.Diagnostics.Stopwatch.StartNew();
 
-            var matrackRequest = JsonConvert.DeserializeObject<MatrackRequest>(myQueueItem);
+            var matrackRequest = JsonConvert.DeserializeObject<MatrackRequest>(myQueueItem)!;
 
-            log.LogWarning($"Message Segmentation Function App Start IMEI : {matrackRequest.imei} -----------------------------------------------------");
+            _logger.LogWarning("Message Segmentation Function App Start IMEI: {Imei}", matrackRequest.imei);
 
-
-            if (matrackRequest.timestamp.Year >= DateTime.Now.Year)
+            if (matrackRequest.timestamp.Year >= DateTime.UtcNow.Year)
             {
-                var result = await _processDeviceInfo.Process(matrackRequest, log);
+                await _processDeviceInfo.Process(matrackRequest, _logger);
             }
 
             watch.Stop();
-            log.LogWarning($"Message Segmentation Function Execution Time (success): {watch.ElapsedMilliseconds} ms {watch.Elapsed.Seconds} sec ------------------------------------------------------");
+            _logger.LogWarning(
+                "Message Segmentation Execution Time (success): {ElapsedMs}ms {ElapsedSec}s",
+                watch.ElapsedMilliseconds, watch.Elapsed.Seconds);
         }
     }
 }
+

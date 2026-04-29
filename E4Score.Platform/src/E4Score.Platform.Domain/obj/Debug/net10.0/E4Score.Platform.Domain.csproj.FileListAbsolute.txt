@@ -1,0 +1,16 @@
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/bin/Debug/net10.0/E4Score.Platform.Domain.deps.json
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/bin/Debug/net10.0/E4Score.Platform.Domain.dll
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/bin/Debug/net10.0/E4Score.Platform.Domain.pdb
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/bin/Debug/net10.0/E4Score.Platform.Contracts.dll
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/bin/Debug/net10.0/E4Score.Platform.Contracts.pdb
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/obj/Debug/net10.0/E4Score.Platform.Domain.csproj.AssemblyReference.cache
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/obj/Debug/net10.0/E4Score.Platform.Domain.GeneratedMSBuildEditorConfig.editorconfig
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/obj/Debug/net10.0/E4Score.Platform.Domain.AssemblyInfoInputs.cache
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/obj/Debug/net10.0/E4Score.Platform.Domain.AssemblyInfo.cs
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/obj/Debug/net10.0/E4Score.Platform.Domain.csproj.CoreCompileInputs.cache
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/obj/Debug/net10.0/E4Score.Platform.Domain.sourcelink.json
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/obj/Debug/net10.0/E4Score..FCCFAA23.Up2Date
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/obj/Debug/net10.0/E4Score.Platform.Domain.dll
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/obj/Debug/net10.0/refint/E4Score.Platform.Domain.dll
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/obj/Debug/net10.0/E4Score.Platform.Domain.pdb
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Domain/obj/Debug/net10.0/ref/E4Score.Platform.Domain.dll

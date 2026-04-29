@@ -3,8 +3,6 @@ using e4scoreDataIngestionFunctionApp.Interfaces;
 using e4scoreDataIngestionFunctionApp.Models;
 using e4scoreDataIngestionFunctionApp.Models.Enum;
 using e4scoreDataIngestionFunctionApp.Models.RequestModels;
-using GoogleMapsApi.Entities.Directions.Response;
-using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Text.Json;
@@ -19,7 +17,6 @@ namespace e4scoreDataIngestionFunctionApp.Services
 
             ServiceBusClient serviceBusClient = new ServiceBusClient(Environment.GetEnvironmentVariable(ApplicationSettings.MaTrackQueueConnection));
             var sender = serviceBusClient.CreateSender(ApplicationSettings.DeviceProcessingQueueName);
-
             try
             {
                 var messageToBe = JsonSerializer.Serialize(deviceProcessing);
@@ -32,7 +29,7 @@ namespace e4scoreDataIngestionFunctionApp.Services
             catch (Exception ex)
             {
                 log.LogError($"Exception on sending deviceprocessing Queue: {deviceProcessing.IMEI} Exception {ex.Message} --------------------------------");
-                throw ex;
+                throw;
             }
             finally
             {

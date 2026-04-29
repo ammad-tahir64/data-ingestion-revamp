@@ -42,7 +42,7 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
         public void SetDeviceCache(Device device)
         {
             var cache = Connect();
-            cache.StringSet(RedisKeys.DeviceKey + device.imei, JsonSerializer.Serialize(device));
+            cache.StringSet(RedisKeys.DeviceKey + device.imei, JsonSerializer.Serialize(device), RedisKeys.ReferenceDataTtl);
         }
 
         public Device GetDeviceCache(string imei)
@@ -64,9 +64,8 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
             if (!UnidentifiedCacheExists(imei)) 
             {
                 var cache = Connect();
-                cache.StringSet(RedisKeys.UnidentifiedDeviceKey + imei, imei);
+                cache.StringSet(RedisKeys.UnidentifiedDeviceKey + imei, imei, RedisKeys.UnidentifiedDeviceTtl);
             }
-
         }
 
         public bool UnidentifiedCacheExists(string imei)
@@ -86,7 +85,7 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
         public void SetMatrackCache(MatrackRequest matrackRequest)
         {
             var cache = Connect();
-            cache.StringSet(RedisKeys.MatrackKey + matrackRequest.imei, JsonSerializer.Serialize(matrackRequest));
+            cache.StringSet(RedisKeys.MatrackKey + matrackRequest.imei, JsonSerializer.Serialize(matrackRequest), RedisKeys.RuntimeStateTtl);
         }
 
         public MatrackRequest GetMatrackCache(string imei)
@@ -107,7 +106,7 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
         public void SetDateOfLastMoveCache(DateTime dateOfLastMove, string imei)
         {
             var cache = Connect();
-            cache.StringSet(RedisKeys.ImeiKey + imei, Convert.ToString(dateOfLastMove));
+            cache.StringSet(RedisKeys.ImeiKey + imei, Convert.ToString(dateOfLastMove), RedisKeys.RuntimeStateTtl);
         }
 
         public string GetDateOfLastMoveCache(string imei)
@@ -131,8 +130,7 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
                 return;
             }
             var cache = Connect();
-
-            cache.StringSet(RedisKeys.EventKey + events.imei, JsonSerializer.Serialize(events));
+            cache.StringSet(RedisKeys.EventKey + events.imei, JsonSerializer.Serialize(events), RedisKeys.RuntimeStateTtl);
         }
 
         public Event GetEventCache(string imei)
@@ -179,7 +177,7 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
         return;
       }
       var cache = Connect(); 
-      cache.StringSet(RedisKeys.MoveInNOfDays + imei, JsonSerializer.Serialize(lastMovesInNDays)); 
+      cache.StringSet(RedisKeys.MoveInNOfDays + imei, JsonSerializer.Serialize(lastMovesInNDays), RedisKeys.RuntimeStateTtl); 
     }
 
 

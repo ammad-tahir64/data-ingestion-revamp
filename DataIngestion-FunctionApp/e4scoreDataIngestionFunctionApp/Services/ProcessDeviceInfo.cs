@@ -227,7 +227,7 @@ namespace e4scoreDataIngestionFunctionApp.Services
                 // Get the line number from the stack frame
                 var line = frame.GetFileLineNumber();
                 log.LogError($"Exception on IMEI: {matrackRequest.imei} Exception {ex.Message} on line no : {line} --------------------------------");
-                throw ex;
+                throw;
             }
         }
 

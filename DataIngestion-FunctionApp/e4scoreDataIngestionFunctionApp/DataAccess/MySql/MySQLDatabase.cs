@@ -10,52 +10,48 @@ using e4scoreDataIngestionFunctionApp.Models.GeoLocation;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using MySqlConnector;
-using Microsoft.Azure.ServiceBus;
 using e4scoreDataIngestionFunctionApp.Models;
 using e4scoreDataIngestionFunctionApp.Services;
 using e4scoreDataIngestionFunctionApp.Interfaces;
-using GoogleMapsApi.Entities.PlacesDetails.Response;
-using Microsoft.EntityFrameworkCore;
-using System.Security.Cryptography;
-using System.Reflection;
-using Microsoft.Azure.Amqp.Framing;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
-using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics;
+using Dapper;
+using Microsoft.Data.SqlClient;
 
 namespace e4scoreDataIngestionFunctionApp.DataAccess
 {
     public class MySQLDatabase : IMySQLDatabase
     {
-
         private readonly IDeviceProcessingQueue _deviceProcessingQueue;
-        private readonly ezcheckinContext _dbContext;
         private readonly IAzureRedisCache _azureRedisCache;
-        public MySQLDatabase(IDeviceProcessingQueue deviceProcessingQueue, ezcheckinContext db, IAzureRedisCache azureRedisCache)
+        private readonly string _connectionString;
+
+        public MySQLDatabase(IDeviceProcessingQueue deviceProcessingQueue, IAzureRedisCache azureRedisCache)
         {
             _deviceProcessingQueue = deviceProcessingQueue;
-            _dbContext = db;
             _azureRedisCache = azureRedisCache;
+            _connectionString = Environment.GetEnvironmentVariable("SqlConnection");
         }
 
         public DeviceEvent GetDeviceEventsByIMEI(MatrackRequest matrackRequest, ILogger log)
         {
             try
             {
-                List<LastMoveDays> lastMoveDays = new List<LastMoveDays>();
                 Models.DomainModels.Event events = new Models.DomainModels.Event();
                 LastMovesInNDays lastMovesInNDays = new LastMovesInNDays();
-                var latitude = Convert.ToString(matrackRequest.location.primary.latitude);
-                var longitude = Convert.ToString(matrackRequest.location.primary.longitude);
-                var findImei = _dbContext.EztrackDevices.Any(a => a.Imei == matrackRequest.imei && a.AssetId != null);
+
+                using var connection = new SqlConnection(_connectionString);
+
+                bool findImei = connection.ExecuteScalar<bool>(
+                    "SELECT CASE WHEN EXISTS (SELECT 1 FROM eztrack_device WHERE imei = @imei AND asset_id IS NOT NULL) THEN 1 ELSE 0 END",
+                    new { imei = matrackRequest.imei });
+
                 if (!findImei)
                 {
                     SaveUnIdentifiedDevices(matrackRequest);
                     return new DeviceEvent { DeviceNotFound = true };
                 }
 
-                var device = GetDeviceData(matrackRequest);
+                var device = GetDeviceData(matrackRequest, connection);
 
                 if (device != null)
                 {
@@ -82,72 +78,8 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
                     events.source_timestamp = device.SourceTimestamp;
                 }
 
-                //var eventExist = _dbContext.EztrackEvents.Any(a => a.Imei == matrackRequest.imei);
-                //if (!eventExist)
-                //{
-                //    var device = GetDeviceData(matrackRequest);
-
-                //    if (device != null)
-                //    {
-                //        events.imei = device.Imei;
-                //        events.company_id = (long)device.OwnerId;
-                //        events.date_of_last_move = matrackRequest.timestamp;
-                //        events.assetid = device.AssetId;
-                //        events.last_latitude = device.LastEventLatitude;
-                //        events.last_longitude = device.LastEventLongitude;
-                //        events.tracker_type = device.TrackerType;
-                //        events.latitude = device.Latitude;
-                //        events.longitude = device.Longitude;
-                //        events.domicile_name1 = device.Name;
-                //        events.asset_domicile_name = device.Name;
-                //        events.asset_name1 = device.asset_name;
-                //        events.asset_uuid = device.Uuid;
-                //        events.moves_in_last3days = device.MovesInLast3days;
-                //        events.moves_in_last7days = device.MovesInLast7days;
-                //        events.moves_in_last30days = device.MovesInLast30days;
-                //        events.moves_in_last60days = device.MovesInLast60days;
-                //        events.moves_in_last90days = device.MovesInLast90days;
-                //        events.zone = device.Zone;
-                //        events.tracker_type = device.TrackerType;
-                //    }
-                //}
-                //else
-                //{
-                //    var @event = GetEventsData(matrackRequest);
-                //    if (events != null)
-                //    {
-                //        events.imei = @event.Imei;
-                //        events.company_id = (long)@event.CompanyId;
-                //        events.assetid = @event.assetid;
-                //        events.last_latitude = @event.last_latitude;
-                //        events.last_longitude = @event.last_longitude;
-                //        events.tracker_type = @event.TrackerType;
-                //        events.latitude = @event.Latitude;
-                //        events.longitude = @event.Longitude;
-                //        events.domicile_name1 = @event.Name;
-                //        events.asset_domicile_name = @event.Name;
-                //        events.asset_name1 = @event.asset_name;
-                //        events.asset_uuid = @event.AssetUuid;
-                //        events.moves_in_last3days = @event.MovesInLast3days;
-                //        events.moves_in_last7days = @event.MovesInLast7days;
-                //        events.moves_in_last30days = @event.MovesInLast30days;
-                //        events.moves_in_last60days = @event.MovesInLast60days;
-                //        events.moves_in_last90days = @event.MovesInLast90days;
-                //        events.is_move = @event.IsMove;
-                //        events.first_move_of_day = @event.FirstMoveOfDay;
-                //        events.date_of_last_move = @event.DateOfLastMove;
-                //        events.zone = @event.Zone;
-                //        events.tracker_type = @event.TrackerType;
-                //        events.ExcrusionTime = @event.ExcrusionTime;
-                //        events.ExcrusionTimeStart = @event.ExcrusionTimeStart;
-                //        events.DwellTime = @event.DwellTime;
-                //        events.DwellTimeStart = @event.DwellTimeStart;
-                //        events.source_timestamp = @event.SourceTimestamp;
-                //    }
-
                 if (events != null)
                 {
-
                     lastMovesInNDays.three = events.moves_in_last3days is null ? 0 : (int)events.moves_in_last3days;
                     lastMovesInNDays.seven = events.moves_in_last7days is null ? 0 : (int)events.moves_in_last7days;
                     lastMovesInNDays.thirty = events.moves_in_last30days is null ? 0 : (int)events.moves_in_last30days;
@@ -156,38 +88,17 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
                     lastMovesInNDays.source_timestamp = matrackRequest?.timestamp;
                 }
 
-                //    // var eventsDataNinty = _dbContext.EztrackEvents.Where(x => x.Imei == matrackRequest.imei && x.SourceTimestamp >= DateTime.Now.AddDays(-90) && x.FirstMoveOfDay == 1)
-                //    //.OrderByDescending(x => x.SourceTimestamp).AsEnumerable()
-                //    //.Select((x, index) => new
-                //    //{
-                //    //  source_timestamp = x.SourceTimestamp,
-                //    //  serial_number = index + 1,
-                //    //  imei = x.Imei,
-                //    //  is_move = x.IsMove
-                //    //}).ToList();  
-                //    // foreach (var item in eventsDataNinty)
-                //    // {
-                //    //   LastMoveDays lastMoveDays1 = new LastMoveDays();
-                //    //   lastMoveDays1.source_timestamp = item.source_timestamp.Value;
-                //    //   lastMoveDays1.serial_number = item.serial_number;
-                //    //   lastMoveDays1.is_move = item.is_move;
-                //    //   lastMoveDays1.imei = item.imei;
-                //    //   lastMoveDays.Add(lastMoveDays1);
-                //    // }
-                //}
-
                 if (!events.imei.Any())
                 {
-                    // log.LogInformation($"[GetDeviceEvents] MYSQL Exception : {ex.Message} --------------------------------");
                     log.LogInformation($"Device with imei : {matrackRequest.imei} not found #######################");
                     return new DeviceEvent { EventNotFound = true };
                 }
-                return new DeviceEvent { Event = events, lastMovesInNDays = lastMovesInNDays }; //, LastMoveDays = lastMoveDays
+                return new DeviceEvent { Event = events, lastMovesInNDays = lastMovesInNDays };
             }
             catch (Exception ex)
             {
-                log.LogInformation($"[GetDeviceEvents] MYSQL Exception : {ex.Message} --------------------------------");
-                throw ex;
+                log.LogInformation($"[GetDeviceEvents] SQL Exception : {ex.Message} --------------------------------");
+                throw;
             }
         }
 
@@ -195,7 +106,6 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
         {
             try
             {
-                Models.GeocodeLocation geocodeLocation = new Models.GeocodeLocation();
                 var watch = new Stopwatch();
                 watch.Start();
                 string latStr = matrackRequest.location.primary.latitude.ToString("0.000");
@@ -204,35 +114,53 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
                 {
                     return null;
                 }
-                geocodeLocation = _dbContext.GeocodeLocations.Where(a => a.Longitude == langStr && a.Latitude == latStr).FirstOrDefault();
+
+                using var connection = new SqlConnection(_connectionString);
+
+                const string exactSql = @"
+                    SELECT id, latitude, longitude,
+                           street_address AS StreetAddress, locality AS Locality,
+                           state, country, postal, full_location AS FullLocation, created, version
+                    FROM geocode_location
+                    WHERE longitude = @longitude AND latitude = @latitude";
+
+                var geocodeLocation = connection.QueryFirstOrDefault<Models.GeocodeLocation>(
+                    exactSql, new { longitude = langStr, latitude = latStr });
+
                 if (geocodeLocation is null)
                 {
-                    geocodeLocation = _dbContext.GeocodeLocations.Where(a => a.Longitude.Contains(langStr) && a.Latitude.Contains(latStr)).FirstOrDefault();
+                    const string likeSql = @"
+                        SELECT id, latitude, longitude,
+                               street_address AS StreetAddress, locality AS Locality,
+                               state, country, postal, full_location AS FullLocation, created, version
+                        FROM geocode_location
+                        WHERE longitude LIKE '%' + @longitude + '%' AND latitude LIKE '%' + @latitude + '%'";
+
+                    geocodeLocation = connection.QueryFirstOrDefault<Models.GeocodeLocation>(
+                        likeSql, new { longitude = langStr, latitude = latStr });
                 }
 
                 if (geocodeLocation == null)
                 {
                     return null;
                 }
-                else
+
+                var addressInfo = new AddressInfo
                 {
-                    var addressInfo = new AddressInfo
-                    {
-                        Address = geocodeLocation?.StreetAddress,
-                        Postal = geocodeLocation?.Postal,
-                        City = geocodeLocation?.Locality,
-                        State = geocodeLocation?.State,
-                        Country = geocodeLocation?.Country
-                    };
-                    watch.Stop();
-                    log.LogWarning($"Get Geolocation from Database : {geocodeLocation?.StreetAddress} Time : {watch.Elapsed.Seconds} sec ");
-                    return addressInfo;
-                }
+                    Address = geocodeLocation.StreetAddress,
+                    Postal = geocodeLocation.Postal,
+                    City = geocodeLocation.Locality,
+                    State = geocodeLocation.State,
+                    Country = geocodeLocation.Country
+                };
+                watch.Stop();
+                log.LogWarning($"Get Geolocation from Database : {geocodeLocation.StreetAddress} Time : {watch.Elapsed.Seconds} sec ");
+                return addressInfo;
             }
             catch (Exception ex)
             {
-                log.LogInformation($"[GetGeocodeLocation] MYSQL Exception : {ex.Message} --------------------------------");
-                throw ex;
+                log.LogInformation($"[GetGeocodeLocation] SQL Exception : {ex.Message} --------------------------------");
+                throw;
             }
         }
 
@@ -240,126 +168,132 @@ namespace e4scoreDataIngestionFunctionApp.DataAccess
         {
             try
             {
-                Models.GeocodeLocation geocodeLocation = new Models.GeocodeLocation();
+                string longitude = matrackRequest.location.primary.longitude.ToString("0.000");
+                string latitude = matrackRequest.location.primary.latitude.ToString("0.000");
 
-                geocodeLocation.FullLocation = addressInfo.FullLocation;
-                geocodeLocation.StreetAddress = addressInfo.Address == "" ? null : addressInfo.Address;
-                geocodeLocation.Postal = addressInfo.Postal;
-                geocodeLocation.State = addressInfo.State;
-                geocodeLocation.Locality = addressInfo.City;
-                geocodeLocation.Created = DateTime.UtcNow;
-                geocodeLocation.Version = 0;
-                geocodeLocation.Country = addressInfo.Country;
-                geocodeLocation.Longitude = matrackRequest.location.primary.longitude.ToString("0.000");
-                geocodeLocation.Latitude = matrackRequest.location.primary.latitude.ToString("0.000");
-                var geocodeLocationExist = _dbContext.GeocodeLocations.Where(a => a.Longitude == geocodeLocation.Longitude && a.Latitude == geocodeLocation.Latitude).FirstOrDefault();
-                if (geocodeLocationExist is null)
+                using var connection = new SqlConnection(_connectionString);
+
+                bool exists = connection.ExecuteScalar<bool>(
+                    "SELECT CASE WHEN EXISTS (SELECT 1 FROM geocode_location WHERE longitude = @longitude AND latitude = @latitude) THEN 1 ELSE 0 END",
+                    new { longitude, latitude });
+
+                if (!exists)
                 {
-                    _dbContext.GeocodeLocations.Add(geocodeLocation);
-                    _dbContext.SaveChanges();
+                    const string insertSql = @"
+                        INSERT INTO geocode_location (created, version, latitude, longitude, street_address, locality, state, country, postal, full_location)
+                        VALUES (GETUTCDATE(), 0, @latitude, @longitude, @streetAddress, @locality, @state, @country, @postal, @fullLocation)";
+
+                    connection.Execute(insertSql, new
+                    {
+                        latitude,
+                        longitude,
+                        streetAddress = string.IsNullOrEmpty(addressInfo.Address) ? null : addressInfo.Address,
+                        locality = addressInfo.City,
+                        state = addressInfo.State,
+                        country = addressInfo.Country,
+                        postal = addressInfo.Postal,
+                        fullLocation = addressInfo.FullLocation
+                    });
                 }
             }
             catch (Exception ex)
             {
-                log.LogInformation($"[GetGeocodeLocation] MYSQL Exception : {ex.Message} --------------------------------");
-                throw ex;
+                log.LogInformation($"[SaveGeocodeLocation] SQL Exception : {ex.Message} --------------------------------");
+                throw;
             }
-
         }
-
 
         private void SaveUnIdentifiedDevices(MatrackRequest matrackRequest)
         {
+            string latitude = Convert.ToString(matrackRequest.location.primary.latitude);
+            string longitude = Convert.ToString(matrackRequest.location.primary.longitude);
 
-            var latitude = Convert.ToString(matrackRequest.location.primary.latitude);
-            var longitude = Convert.ToString(matrackRequest.location.primary.longitude);
+            using var connection = new SqlConnection(_connectionString);
 
-            UnidentifiedDeviceDatum unidentifiedDeviceDatum = new UnidentifiedDeviceDatum();
-            unidentifiedDeviceDatum.Imei = matrackRequest.imei;
-            unidentifiedDeviceDatum.Longitude = longitude;
-            unidentifiedDeviceDatum.Latitude = latitude;
-            unidentifiedDeviceDatum.SourceTimestamp = matrackRequest.timestamp;
-            unidentifiedDeviceDatum.Created = DateTime.UtcNow;
-            unidentifiedDeviceDatum.DeviceProvider = matrackRequest.location.located_with;
-            _dbContext.UnidentifiedDeviceData.Add(unidentifiedDeviceDatum);
-            _dbContext.SaveChanges();
+            const string sql = @"
+                INSERT INTO unidentified_device_data (imei, longitude, latitude, source_timestamp, created, device_provider)
+                VALUES (@imei, @longitude, @latitude, @sourceTimestamp, GETUTCDATE(), @deviceProvider)";
+
+            connection.Execute(sql, new
+            {
+                imei = matrackRequest.imei,
+                longitude,
+                latitude,
+                sourceTimestamp = matrackRequest.timestamp,
+                deviceProvider = matrackRequest.location.located_with
+            });
         }
 
-
-        private dynamic GetDeviceData(MatrackRequest matrackRequest)
+        private dynamic GetDeviceData(MatrackRequest matrackRequest, IDbConnection connection)
         {
-            var device = (from a in _dbContext.EztrackDevices.Where(a => a.Imei == matrackRequest.imei)
-                          join b in _dbContext.Assets on a.AssetId equals b.Id
-                          join l in _dbContext.Locations on b.DomicileId equals l.Id
-                          select new
-                          {
-                              a.Imei,
-                              a.OwnerId,
-                              a.DateOfLastMove,
-                              a.AssetId,
-                              a.LastEventLatitude,
-                              a.LastEventLongitude,
-                              a.TrackerType,
-                              l.Latitude,
-                              l.Longitude,
-                              l.Name,
-                              asset_name = b.AssetId,
-                              b.Uuid,
-                              a.MovesInLast3days,
-                              a.MovesInLast7days,
-                              a.MovesInLast30days,
-                              a.MovesInLast60days,
-                              a.MovesInLast90days,
-                              a.Zone,
-                              SourceTimestamp = a.LatestEventDate,
-                          }
-                       ).FirstOrDefault();
-            return device;
+            const string sql = @"
+                SELECT
+                    d.imei          AS Imei,
+                    d.owner_id      AS OwnerId,
+                    d.date_of_last_move AS DateOfLastMove,
+                    d.asset_id      AS AssetId,
+                    d.last_event_latitude  AS LastEventLatitude,
+                    d.last_event_longitude AS LastEventLongitude,
+                    d.tracker_type  AS TrackerType,
+                    l.latitude      AS Latitude,
+                    l.longitude     AS Longitude,
+                    l.name          AS Name,
+                    b.asset_id      AS asset_name,
+                    b.uuid          AS Uuid,
+                    d.moves_in_last3days  AS MovesInLast3days,
+                    d.moves_in_last7days  AS MovesInLast7days,
+                    d.moves_in_last30days AS MovesInLast30days,
+                    d.moves_in_last60days AS MovesInLast60days,
+                    d.moves_in_last90days AS MovesInLast90days,
+                    d.zone          AS Zone,
+                    d.latest_event_date AS SourceTimestamp
+                FROM eztrack_device d
+                INNER JOIN asset b ON d.asset_id = b.id
+                INNER JOIN location l ON b.domicile_id = l.id
+                WHERE d.imei = @imei";
+
+            return connection.QueryFirstOrDefault(sql, new { imei = matrackRequest.imei });
         }
 
-
-        private dynamic GetEventsData(MatrackRequest matrackRequest)
+        private dynamic GetEventsData(MatrackRequest matrackRequest, IDbConnection connection)
         {
-            var eventss = (from a in _dbContext.EztrackEvents.Where(a => a.Imei == matrackRequest.imei)
-                           join p in _dbContext.PingLocations on a.LocationId equals p.Id
-                           join b in _dbContext.Assets on a.AssetUuid equals b.Uuid
-                           join l in _dbContext.Locations on b.DomicileId equals l.Id
-                           select new
-                           {
-                               b.Uuid,
-                               a.Id,
-                               asset_name = b.AssetId,
-                               assetid = b.Id,
-                               b.MovesInLast3days,
-                               b.MovesInLast7days,
-                               b.MovesInLast30days,
-                               b.MovesInLast60days,
-                               b.MovesInLast90days,
-                               l.Latitude,
-                               l.Longitude,
-                               l.Name,
-                               l.CompanyId,
-                               last_longitude = p.Longitude,
-                               last_latitude = p.Latitude,
-                               a.Imei,
-                               a.TrackerType,
-                               a.AssetUuid,
-                               a.IsMove,
-                               a.FirstMoveOfDay,
-                               a.DateOfLastMove,
-                               a.Zone,
-                               a.ExcrusionTime,
-                               a.ExcrusionTimeStart,
-                               a.DwellTime,
-                               a.DwellTimeStart,
-                               a.SourceTimestamp
+            const string sql = @"
+                SELECT TOP 1
+                    b.uuid          AS Uuid,
+                    a.id            AS Id,
+                    b.asset_id      AS asset_name,
+                    b.id            AS assetid,
+                    b.moves_in_last3days  AS MovesInLast3days,
+                    b.moves_in_last7days  AS MovesInLast7days,
+                    b.moves_in_last30days AS MovesInLast30days,
+                    b.moves_in_last60days AS MovesInLast60days,
+                    b.moves_in_last90days AS MovesInLast90days,
+                    l.latitude      AS Latitude,
+                    l.longitude     AS Longitude,
+                    l.name          AS Name,
+                    l.company_id    AS CompanyId,
+                    p.longitude     AS last_longitude,
+                    p.latitude      AS last_latitude,
+                    a.imei          AS Imei,
+                    a.tracker_type  AS TrackerType,
+                    a.asset_uuid    AS AssetUuid,
+                    a.is_move       AS IsMove,
+                    a.first_move_of_day AS FirstMoveOfDay,
+                    a.date_of_last_move AS DateOfLastMove,
+                    a.zone          AS Zone,
+                    a.excrusion_time       AS ExcrusionTime,
+                    a.excrusion_time_start AS ExcrusionTimeStart,
+                    a.dwell_time           AS DwellTime,
+                    a.dwell_time_start     AS DwellTimeStart,
+                    a.source_timestamp     AS SourceTimestamp
+                FROM eztrack_event a
+                INNER JOIN ping_location p ON a.location_id = p.id
+                INNER JOIN asset b ON a.asset_uuid = b.uuid
+                INNER JOIN location l ON b.domicile_id = l.id
+                WHERE a.imei = @imei
+                ORDER BY a.id DESC";
 
-                           }
-                               ).OrderByDescending(a => a.Id).FirstOrDefault();
-            return eventss;
+            return connection.QueryFirstOrDefault(sql, new { imei = matrackRequest.imei });
         }
-
-
     }
-
 }

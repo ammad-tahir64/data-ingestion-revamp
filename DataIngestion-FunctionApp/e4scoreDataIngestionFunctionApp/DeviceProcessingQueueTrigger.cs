@@ -1,255 +1,305 @@
 using System;
-using e4scoreDataIngestionFunctionApp.Models;
-using GoogleMapsApi.Entities.Directions.Response;
+using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Host;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
-using MySqlConnector;
 using e4scoreDataIngestionFunctionApp.Models.Enum;
-using System.Data;
 using e4scoreDataIngestionFunctionApp.Models.RequestModels;
 using Newtonsoft.Json;
 using System.Collections.Generic;
-using System.Data.Common;
-using System.Xml;
 using e4scoreDataIngestionFunctionApp.Models.DomainModels;
 using e4scoreDataIngestionFunctionApp.Models;
-using System.Linq;
-using Microsoft.EntityFrameworkCore;
-using Task = System.Threading.Tasks.Task;
-using System.Transactions;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory.Database;
 using e4scoreDataIngestionFunctionApp.Services;
+using Dapper;
+using Microsoft.Data.SqlClient;
+using SysTask = System.Threading.Tasks.Task;
 
 namespace e4scoreDataIngestionFunctionApp
 {
     public class DeviceProcessingQueueTrigger
     {
-        private readonly ezcheckinContext _dbContext;
+        private readonly string _connectionString;
         private readonly IE4EAIQueue _e4EAIQueue;
-        public DeviceProcessingQueueTrigger(ezcheckinContext db, IE4EAIQueue e4EAIQueue)
+        private readonly ILogger<DeviceProcessingQueueTrigger> _logger;
+
+        public DeviceProcessingQueueTrigger(
+            IE4EAIQueue e4EAIQueue,
+            ILogger<DeviceProcessingQueueTrigger> logger)
         {
-            _dbContext = db;
             _e4EAIQueue = e4EAIQueue;
+            _logger = logger;
+            _connectionString = Environment.GetEnvironmentVariable("SqlConnection")
+                ?? throw new InvalidOperationException("SqlConnection environment variable is not set.");
         }
-        [FunctionName("DeviceProcessingQueueTrigger")]
-        public async Task Run([ServiceBusTrigger("deviceprocessing", Connection = ApplicationSettings.MaTrackQueueConnection)] string myQueueItem,
-            ILogger log)
-        { 
-            var deviceProcessing = JsonConvert.DeserializeObject<DeviceProcessing>(myQueueItem);
-            List<object> list = new List<object>();
-            Models.PingSensor pingSensor = new Models.PingSensor();
-            Models.PingLocation pingLocation = new Models.PingLocation();
-            EztrackEvent eztrackEvent = new EztrackEvent();
-            Asset eztrackAsset = new Asset();
-            DateTime? dateOfLastMoveUpdated = null;
+
+        [Function("DeviceProcessingQueueTrigger")]
+        public async SysTask Run(
+            [ServiceBusTrigger(ApplicationSettings.DeviceProcessingQueueName, Connection = ApplicationSettings.MaTrackQueueConnection)]
+            string myQueueItem,
+            CancellationToken ct)
+        {
+            var deviceProcessing = JsonConvert.DeserializeObject<DeviceProcessing>(myQueueItem)!;
             deviceProcessing.MessageId = Guid.NewGuid().ToString();
 
+            await using var connection = new SqlConnection(_connectionString);
+            await connection.OpenAsync(ct);
+            await using var transaction = await connection.BeginTransactionAsync(ct);
 
-            using (var scope = _dbContext.Database.BeginTransaction())
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            try
             {
-                var watch = new System.Diagnostics.Stopwatch();
-                watch.Start();
-                try
+                _logger.LogWarning(
+                    "Device Processing Function App Started IMEI: {Imei}",
+                    deviceProcessing.IMEI);
+
+                var eztrackDevice = await connection.QueryFirstOrDefaultAsync(
+                    "SELECT TOP 1 id, version FROM eztrack_device WHERE imei = @imei",
+                    new { imei = deviceProcessing.IMEI },
+                    transaction);
+
+                if (eztrackDevice != null)
                 {
-                    log.LogWarning($"Device Processing Function App Started IMEI : {deviceProcessing.IMEI} -----------------------------------------------------");
+                    DateTime? dateOfLastMoveUpdated;
 
-
-                    var eztrackDevice = _dbContext.EztrackDevices.Where(a => a.Imei == deviceProcessing.IMEI).FirstOrDefault();
-                    if (eztrackDevice != null)
+                    if (deviceProcessing.IsMove == false)
                     {
+                        var lastEventDateOfLastMove = await connection.QueryFirstOrDefaultAsync<DateTime?>(
+                            "SELECT TOP 1 date_of_last_move FROM eztrack_event WHERE imei = @imei ORDER BY id DESC",
+                            new { imei = deviceProcessing.IMEI },
+                            transaction);
 
-                        if (deviceProcessing.IsMove == false)
-                        {
-                            var eventById = _dbContext.EztrackEvents.OrderBy(a => a.Id).LastOrDefault(a => a.Imei == deviceProcessing.IMEI);
-                            if (eventById is not null)
-                            {
-                                dateOfLastMoveUpdated = eventById.DateOfLastMove;
-                            }
-                        }
-                        else
-                        {
-                            dateOfLastMoveUpdated = deviceProcessing.SourceTimestamp;
-                        }
-
-
-
-                        pingSensor.Created = DateTime.UtcNow;
-                        pingSensor.Deleted = 0;
-                        pingSensor.Enabled = 1;
-                        pingSensor.Uuid = Guid.NewGuid().ToString();
-                        pingSensor.Version = 1;
-                        pingSensor.Battery = (float)deviceProcessing?.Battery;
-                        pingSensor.Temperature = deviceProcessing.Temperature == 0 ? null : deviceProcessing.Temperature;
-                        _dbContext.PingSensors.Add(pingSensor);
-
-                        pingLocation.Created = DateTime.UtcNow;
-                        pingLocation.Deleted = 0;
-                        pingLocation.Enabled = 1;
-                        pingLocation.Uuid = Guid.NewGuid().ToString();
-                        pingLocation.Version = 1;
-                        pingLocation.Latitude = deviceProcessing.Latitude;
-                        pingLocation.Longitude = deviceProcessing.Longitude;
-                        _dbContext.PingLocations.Add(pingLocation);
-                        _dbContext.SaveChanges();
-
-
-                        var assetForAssetName = _dbContext.Assets.Where(a => a.Uuid == deviceProcessing.AssetUuid).FirstOrDefault();
-
-                        eztrackEvent.DateOfLastMove = dateOfLastMoveUpdated;
-                        eztrackEvent.Created = DateTime.UtcNow;
-                        eztrackEvent.Deleted = 0;
-                        eztrackEvent.Enabled = 1;
-                        eztrackEvent.Uuid = Guid.NewGuid().ToString();
-                        eztrackEvent.Version = 1;
-                        eztrackEvent.Address = deviceProcessing.Address;
-                        eztrackEvent.AssetUuid = deviceProcessing.AssetUuid;
-                        eztrackEvent.City = deviceProcessing.City;
-                        eztrackEvent.Direction = deviceProcessing.Direction;
-                        eztrackEvent.DistanceFromDomicileInMeters = deviceProcessing.DistanceFromDomicile;
-                        eztrackEvent.DistanceFromPreviousEventInMeters = deviceProcessing.DistanceFromPreviousEvent;
-                        //eztrackEvent.EventType = deviceProcessing.EventType;  
-                        eztrackEvent.FirstMoveOfDay = deviceProcessing.FirstMoveOfDay;
-                        eztrackEvent.Fuel = deviceProcessing.Fuel;
-                        eztrackEvent.GeofenceAddress = deviceProcessing.GeofenceAddress;
-                        eztrackEvent.GeofenceCity = deviceProcessing.GeofenceCity;
-                        eztrackEvent.GeofencePostal = deviceProcessing.GeofencePostal;
-                        eztrackEvent.GeofenceState = deviceProcessing.GeofenceState;
-                        eztrackEvent.GeofenceState = deviceProcessing.GeofenceState;
-                        eztrackEvent.IdleTime = deviceProcessing.IdleTime;
-                        eztrackEvent.Imei = deviceProcessing.IMEI;
-                        eztrackEvent.IsMove = (ulong)(deviceProcessing.IsMove == true ? 1 : 0);
-                        eztrackEvent.LocatedWith = null;
-                        eztrackEvent.LocationName = deviceProcessing.LocationName;
-                        eztrackEvent.Mileage = 0;
-                        eztrackEvent.MoveThresholdInMeters = 804.67;
-                        eztrackEvent.MovesInLast30days = deviceProcessing.Thirty;
-                        eztrackEvent.PingType = null;
-                        eztrackEvent.Postal = deviceProcessing.Postal;
-                        eztrackEvent.Sequence = 0;
-                        eztrackEvent.SourceCreatedAt = null;
-                        eztrackEvent.SourceTimestamp = deviceProcessing.SourceTimestamp;
-                        eztrackEvent.SourceUuid = null;
-                        eztrackEvent.Speed = deviceProcessing.Speed;
-                        eztrackEvent.State = deviceProcessing.State;
-                        eztrackEvent.GroupId = null;
-                        eztrackEvent.LocationId = pingLocation.Id;
-                        eztrackEvent.SensorsId = pingSensor.Id;
-                        eztrackEvent.Zone = deviceProcessing.zone;
-                        eztrackEvent.PingEventUuid = null;
-                        eztrackEvent.AssetDomicileName = deviceProcessing.AssetDomicile;
-                        eztrackEvent.AssetName = assetForAssetName.AssetId;
-                        eztrackEvent.TrackerType = deviceProcessing.TrackerType == null ? "WiFiCellular" : deviceProcessing.TrackerType;
-                        eztrackEvent.DwellTimeStart = deviceProcessing.DwellTime.DwellTimeStart;
-                        eztrackEvent.DwellTime = deviceProcessing.DwellTime.Days;
-                        eztrackEvent.ExcrusionTimeStart = deviceProcessing.ExcursionTime.ExcursionTimeStart;
-                        eztrackEvent.ExcrusionTime = deviceProcessing.ExcursionTime.Days;
-                        eztrackEvent.Updated = DateTime.UtcNow;
-                        _dbContext.EztrackEvents.Add(eztrackEvent);
-                        _dbContext.SaveChanges();
-
-                        var startDateEvent = _dbContext.EztrackEvents.Where(a => a.Imei == deviceProcessing.IMEI).FirstOrDefault().Created;
-                        var endDateEvent = _dbContext.EztrackEvents.Where(a => a.Imei == deviceProcessing.IMEI).OrderBy(a => a.Id).LastOrDefault().Created;
-
-                        eztrackDevice.Updated = DateTime.UtcNow;
-                        eztrackDevice.Version = eztrackDevice.Version + 1;
-                        eztrackDevice.TrackerType = deviceProcessing.TrackerType;
-                        eztrackDevice.OwnerId = deviceProcessing.CompanyId;
-                        eztrackDevice.Battery = deviceProcessing.Battery;
-                        eztrackDevice.LastEventLatitude = deviceProcessing.Latitude;
-                        eztrackDevice.LastEventLongitude = deviceProcessing.Longitude;
-                        eztrackDevice.DistanceFromDomicileInMeters = deviceProcessing.DistanceFromDomicile;
-                        eztrackDevice.AssetId = deviceProcessing.AssetId;
-                        eztrackDevice.LatestEventAddress = string.IsNullOrEmpty(deviceProcessing.GeofenceAddress) ? deviceProcessing.Address : deviceProcessing.GeofenceAddress;
-                        eztrackDevice.LatestEventCity = string.IsNullOrEmpty(deviceProcessing.GeofenceCity) ? deviceProcessing.City : deviceProcessing.GeofenceCity;
-                        eztrackDevice.LatestEventState = string.IsNullOrEmpty(deviceProcessing.GeofenceState) ? deviceProcessing.State : deviceProcessing.GeofenceState;
-                        eztrackDevice.LatestEventPostal = string.IsNullOrEmpty(deviceProcessing.GeofencePostal) ? deviceProcessing.Postal : deviceProcessing.GeofencePostal;
-                        eztrackDevice.DaysOfEventHistory = (endDateEvent - startDateEvent).Value.Days;
-                        eztrackDevice.LatestEventDate = deviceProcessing.SourceTimestamp;
-                        eztrackDevice.LocationName = deviceProcessing.LocationName;
-                        eztrackDevice.DwellTimeStart = deviceProcessing?.DwellTime?.DwellTimeStart;
-                        eztrackDevice.ExcrusionTimeStart = deviceProcessing?.ExcursionTime?.ExcursionTimeStart;
-                        eztrackDevice.DateOfLastMove = dateOfLastMoveUpdated;
-                        _dbContext.Entry(eztrackDevice).State = EntityState.Modified;
-
-                        eztrackAsset = _dbContext.Assets.Where(a => a.Uuid == deviceProcessing.AssetUuid).FirstOrDefault();
-                        eztrackAsset.Updated = DateTime.UtcNow;
-                        eztrackAsset.Version = eztrackDevice.Version + 1;
-                        eztrackAsset.CompanyId = deviceProcessing.CompanyId;
-                        eztrackAsset.Battery = deviceProcessing.Battery;
-                        eztrackAsset.LastEventLatitude = deviceProcessing.Latitude;
-                        eztrackAsset.LastEventLongitude = deviceProcessing.Longitude;
-                        eztrackAsset.DistanceFromDomicileInMeters = deviceProcessing.DistanceFromDomicile;
-                        eztrackAsset.LatestEventAddress = string.IsNullOrEmpty(deviceProcessing.GeofenceAddress) ? deviceProcessing.Address : deviceProcessing.GeofenceAddress;
-                        eztrackAsset.LatestEventCity = string.IsNullOrEmpty(deviceProcessing.GeofenceCity) ? deviceProcessing.City : deviceProcessing.GeofenceCity;
-                        eztrackAsset.LatestEventState = string.IsNullOrEmpty(deviceProcessing.GeofenceState) ? deviceProcessing.State : deviceProcessing.GeofenceState;
-                        eztrackAsset.LatestEventPostal = string.IsNullOrEmpty(deviceProcessing.GeofencePostal) ? deviceProcessing.Postal : deviceProcessing.GeofencePostal;
-                        eztrackAsset.DaysOfEventHistory = (endDateEvent - startDateEvent).Value.Days;
-                        eztrackAsset.LatestEventDate = deviceProcessing.SourceTimestamp;
-                        eztrackAsset.MovesInLast3days = deviceProcessing.Three;
-                        eztrackAsset.MovesInLast7days = deviceProcessing.Seven;
-                        eztrackAsset.MovesInLast30days = deviceProcessing.Thirty;
-                        eztrackAsset.MovesInLast60days = deviceProcessing.Sixty;
-                        eztrackAsset.MovesInLast90days = deviceProcessing.Ninety;
-                        eztrackAsset.TemperatureInc = deviceProcessing.Temperature == 0 ? null : deviceProcessing.Temperature;
-                        eztrackAsset.LocationName = deviceProcessing.LocationName;
-                        eztrackAsset.DateOfLastMove = dateOfLastMoveUpdated;
-                        _dbContext.Entry(eztrackAsset).State = EntityState.Modified;
-
-                        EztrackDeviceEvent eztrackDeviceEvents = new EztrackDeviceEvent();
-                        eztrackDeviceEvents.EztrackDeviceId = eztrackDevice.Id;
-                        eztrackDeviceEvents.EventsId = eztrackEvent.Id;
-                        _dbContext.EztrackDeviceEvents.Add(eztrackDeviceEvents);
-
-                        _dbContext.SaveChanges();
-                        scope.Commit();
-
-                        //var location = _dbContext.Locations.Where(l => l.Id == deviceProcessing.LocationId).FirstOrDefault();
-                        //var equipment = _dbContext.Equipment.Where(e => e.Id == eztrackAsset.EquipmentId).FirstOrDefault();
-                        //var carrer = _dbContext.Carriers.Where(c => c.Id == eztrackAsset.CarrierId).FirstOrDefault();
-
-                        //deviceProcessing.PartnerName = carrer?.Name != null ? carrer.Name : null;
-                        //deviceProcessing.DeviceId = eztrackDevice?.Imei != null ? eztrackDevice.Imei : null;
-                        //deviceProcessing.PartnerId = eztrackAsset?.CarrierId != null ? Convert.ToInt32(eztrackAsset.CarrierId) : null;
-                        //deviceProcessing.EquipmentType = equipment?.Name != null ? equipment.Name : null;
-                        //deviceProcessing.VIN = eztrackAsset?.AssetVinNumber != null ? eztrackAsset.AssetVinNumber : null;
-                        //deviceProcessing.LocationCode = location?.Code != null ? location.Code : null;
-                        //deviceProcessing.Country = location?.Country != null ? location.Country : null;
-                        //deviceProcessing.TimeZone = location?.Timezone != null ? location.Timezone : null;
-                        //deviceProcessing.LastReportedTime = deviceProcessing?.SourceTimestamp;
-                        //deviceProcessing.DateOfLastMove = eztrackAsset?.DateOfLastMove != null ? eztrackAsset.DateOfLastMove : null;
-                        //deviceProcessing.DistanceFromDomicileInMeters = eztrackAsset?.DistanceFromDomicileInMeters != null ? Convert.ToDecimal(eztrackAsset.DistanceFromDomicileInMeters) : null;
-                        //deviceProcessing.MoveFrequency = null;
-                        //deviceProcessing.ShipmentNumber = eztrackAsset?.LatestShipmentId != null ? eztrackAsset.LatestShipmentId.ToString() : null;
-
-                        ////Send consolidated model of DeviceProcessing to the e4-eai-queue for save in the database
-                        //await _e4EAIQueue.SendAsync(deviceProcessing, log);
-
-
-
+                        dateOfLastMoveUpdated = lastEventDateOfLastMove;
                     }
                     else
                     {
-                        log.LogWarning($"Device with imei : {deviceProcessing.IMEI} not found #######################");
+                        dateOfLastMoveUpdated = deviceProcessing.SourceTimestamp;
                     }
 
+                    long pingSensorId = await connection.ExecuteScalarAsync<long>(
+                        @"INSERT INTO ping_sensor (created, deleted, enabled, uuid, version, battery, temperature)
+                          OUTPUT INSERTED.id
+                          VALUES (GETUTCDATE(), 0, 1, @uuid, 1, @battery, @temperature)",
+                        new
+                        {
+                            uuid = Guid.NewGuid().ToString(),
+                            battery = (float)deviceProcessing.Battery,
+                            temperature = deviceProcessing.Temperature == 0 ? (float?)null : deviceProcessing.Temperature
+                        },
+                        transaction);
 
+                    long pingLocationId = await connection.ExecuteScalarAsync<long>(
+                        @"INSERT INTO ping_location (created, deleted, enabled, uuid, version, latitude, longitude)
+                          OUTPUT INSERTED.id
+                          VALUES (GETUTCDATE(), 0, 1, @uuid, 1, @latitude, @longitude)",
+                        new
+                        {
+                            uuid = Guid.NewGuid().ToString(),
+                            latitude = deviceProcessing.Latitude,
+                            longitude = deviceProcessing.Longitude
+                        },
+                        transaction);
 
+                    string assetName = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT TOP 1 asset_id FROM asset WHERE uuid = @uuid",
+                        new { uuid = deviceProcessing.AssetUuid },
+                        transaction);
+
+                    long eztrackEventId = await connection.ExecuteScalarAsync<long>(
+                        @"INSERT INTO eztrack_event (
+                            created, deleted, enabled, updated, uuid, version,
+                            address, asset_uuid, city, date_of_last_move, direction,
+                            distance_from_domicile_in_meters, distance_from_previous_event_in_meters,
+                            first_move_of_day, fuel, geofence_address, geofence_city, geofence_postal,
+                            geofence_state, idle_time, imei, is_move, location_name, mileage,
+                            move_threshold_in_meters, moves_in_last30days, postal, sequence,
+                            source_timestamp, speed, state, location_id, sensors_id, zone,
+                            asset_domicile_name, asset_name, tracker_type,
+                            dwell_time_start, dwell_time, excrusion_time_start, excrusion_time)
+                          OUTPUT INSERTED.id
+                          VALUES (
+                            GETUTCDATE(), 0, 1, GETUTCDATE(), @uuid, 1,
+                            @address, @assetUuid, @city, @dateOfLastMove, @direction,
+                            @distanceFromDomicile, @distanceFromPreviousEvent,
+                            @firstMoveOfDay, @fuel, @geofenceAddress, @geofenceCity, @geofencePostal,
+                            @geofenceState, @idleTime, @imei, @isMove, @locationName, 0,
+                            804.67, @movesInLast30days, @postal, 0,
+                            @sourceTimestamp, @speed, @state, @locationId, @sensorsId, @zone,
+                            @assetDomicile, @assetName, @trackerType,
+                            @dwellTimeStart, @dwellTime, @excrusionTimeStart, @excrusionTime)",
+                        new
+                        {
+                            uuid = Guid.NewGuid().ToString(),
+                            address = deviceProcessing.Address,
+                            assetUuid = deviceProcessing.AssetUuid,
+                            city = deviceProcessing.City,
+                            dateOfLastMove = dateOfLastMoveUpdated,
+                            direction = deviceProcessing.Direction,
+                            distanceFromDomicile = deviceProcessing.DistanceFromDomicile,
+                            distanceFromPreviousEvent = deviceProcessing.DistanceFromPreviousEvent,
+                            firstMoveOfDay = deviceProcessing.FirstMoveOfDay,
+                            fuel = deviceProcessing.Fuel,
+                            geofenceAddress = deviceProcessing.GeofenceAddress,
+                            geofenceCity = deviceProcessing.GeofenceCity,
+                            geofencePostal = deviceProcessing.GeofencePostal,
+                            geofenceState = deviceProcessing.GeofenceState,
+                            idleTime = deviceProcessing.IdleTime,
+                            imei = deviceProcessing.IMEI,
+                            isMove = deviceProcessing.IsMove ? 1 : 0,
+                            locationName = deviceProcessing.LocationName,
+                            movesInLast30days = deviceProcessing.Thirty,
+                            postal = deviceProcessing.Postal,
+                            sourceTimestamp = deviceProcessing.SourceTimestamp,
+                            speed = deviceProcessing.Speed,
+                            state = deviceProcessing.State,
+                            locationId = pingLocationId,
+                            sensorsId = pingSensorId,
+                            zone = deviceProcessing.zone,
+                            assetDomicile = deviceProcessing.AssetDomicile,
+                            assetName,
+                            trackerType = deviceProcessing.TrackerType ?? "WiFiCellular",
+                            dwellTimeStart = deviceProcessing.DwellTime?.DwellTimeStart,
+                            dwellTime = deviceProcessing.DwellTime?.Days,
+                            excrusionTimeStart = deviceProcessing.ExcursionTime?.ExcursionTimeStart,
+                            excrusionTime = deviceProcessing.ExcursionTime?.Days
+                        },
+                        transaction);
+
+                    var eventDates = await connection.QueryFirstOrDefaultAsync(
+                        "SELECT MIN(created) AS StartDate, MAX(created) AS EndDate FROM eztrack_event WHERE imei = @imei",
+                        new { imei = deviceProcessing.IMEI },
+                        transaction);
+
+                    long daysOfEventHistory = 0;
+                    if (eventDates != null && eventDates.StartDate != null && eventDates.EndDate != null)
+                    {
+                        daysOfEventHistory = ((DateTime)eventDates.EndDate - (DateTime)eventDates.StartDate).Days;
+                    }
+
+                    string latestAddress = string.IsNullOrEmpty(deviceProcessing.GeofenceAddress) ? deviceProcessing.Address : deviceProcessing.GeofenceAddress;
+                    string latestCity = string.IsNullOrEmpty(deviceProcessing.GeofenceCity) ? deviceProcessing.City : deviceProcessing.GeofenceCity;
+                    string latestState = string.IsNullOrEmpty(deviceProcessing.GeofenceState) ? deviceProcessing.State : deviceProcessing.GeofenceState;
+                    string latestPostal = string.IsNullOrEmpty(deviceProcessing.GeofencePostal) ? deviceProcessing.Postal : deviceProcessing.GeofencePostal;
+
+                    await connection.ExecuteAsync(
+                        @"UPDATE eztrack_device SET
+                            updated = GETUTCDATE(),
+                            version = version + 1,
+                            tracker_type = @trackerType,
+                            owner_id = @ownerId,
+                            battery = @battery,
+                            last_event_latitude = @latitude,
+                            last_event_longitude = @longitude,
+                            distance_from_domicile_in_meters = @distanceFromDomicile,
+                            asset_id = @assetId,
+                            latest_event_address = @latestAddress,
+                            latest_event_city = @latestCity,
+                            latest_event_state = @latestState,
+                            latest_event_postal = @latestPostal,
+                            days_of_event_history = @daysOfEventHistory,
+                            latest_event_date = @sourceTimestamp,
+                            location_name = @locationName,
+                            dwell_time_start = @dwellTimeStart,
+                            excrusion_time_start = @excrusionTimeStart,
+                            date_of_last_move = @dateOfLastMove
+                          WHERE imei = @imei",
+                        new
+                        {
+                            trackerType = deviceProcessing.TrackerType,
+                            ownerId = deviceProcessing.CompanyId,
+                            battery = deviceProcessing.Battery,
+                            latitude = deviceProcessing.Latitude,
+                            longitude = deviceProcessing.Longitude,
+                            distanceFromDomicile = deviceProcessing.DistanceFromDomicile,
+                            assetId = deviceProcessing.AssetId,
+                            latestAddress,
+                            latestCity,
+                            latestState,
+                            latestPostal,
+                            daysOfEventHistory,
+                            sourceTimestamp = deviceProcessing.SourceTimestamp,
+                            locationName = deviceProcessing.LocationName,
+                            dwellTimeStart = deviceProcessing.DwellTime?.DwellTimeStart,
+                            excrusionTimeStart = deviceProcessing.ExcursionTime?.ExcursionTimeStart,
+                            dateOfLastMove = dateOfLastMoveUpdated,
+                            imei = deviceProcessing.IMEI
+                        },
+                        transaction);
+
+                    await connection.ExecuteAsync(
+                        @"UPDATE asset SET
+                            updated = GETUTCDATE(),
+                            version = version + 1,
+                            company_id = @companyId,
+                            battery = @battery,
+                            last_event_latitude = @latitude,
+                            last_event_longitude = @longitude,
+                            distance_from_domicile_in_meters = @distanceFromDomicile,
+                            latest_event_address = @latestAddress,
+                            latest_event_city = @latestCity,
+                            latest_event_state = @latestState,
+                            latest_event_postal = @latestPostal,
+                            days_of_event_history = @daysOfEventHistory,
+                            latest_event_date = @sourceTimestamp,
+                            moves_in_last3days = @three,
+                            moves_in_last7days = @seven,
+                            moves_in_last30days = @thirty,
+                            moves_in_last60days = @sixty,
+                            moves_in_last90days = @ninety,
+                            temperature_inc = @temperatureInc,
+                            location_name = @locationName,
+                            date_of_last_move = @dateOfLastMove
+                          WHERE uuid = @assetUuid",
+                        new
+                        {
+                            companyId = deviceProcessing.CompanyId,
+                            battery = deviceProcessing.Battery,
+                            latitude = deviceProcessing.Latitude,
+                            longitude = deviceProcessing.Longitude,
+                            distanceFromDomicile = deviceProcessing.DistanceFromDomicile,
+                            latestAddress,
+                            latestCity,
+                            latestState,
+                            latestPostal,
+                            daysOfEventHistory,
+                            sourceTimestamp = deviceProcessing.SourceTimestamp,
+                            three = deviceProcessing.Three,
+                            seven = deviceProcessing.Seven,
+                            thirty = deviceProcessing.Thirty,
+                            sixty = deviceProcessing.Sixty,
+                            ninety = deviceProcessing.Ninety,
+                            temperatureInc = deviceProcessing.Temperature == 0 ? (float?)null : deviceProcessing.Temperature,
+                            locationName = deviceProcessing.LocationName,
+                            dateOfLastMove = dateOfLastMoveUpdated,
+                            assetUuid = deviceProcessing.AssetUuid
+                        },
+                        transaction);
+
+                    await connection.ExecuteAsync(
+                        "INSERT INTO eztrack_device_events (eztrack_device_id, events_id) VALUES (@eztrackDeviceId, @eventsId)",
+                        new { eztrackDeviceId = (long)eztrackDevice.id, eventsId = eztrackEventId },
+                        transaction);
+
+                    await transaction.CommitAsync(ct);
                 }
-                catch (Exception ex)
+                else
                 {
-                    log.LogError($"[Device Processing] MYSQL Exception : {ex.Message}  --------------------------------");
-                    scope.Rollback();
-                    throw new Exception(ex.Message);
+                    _logger.LogWarning("Device with IMEI: {Imei} not found", deviceProcessing.IMEI);
                 }
-                finally
-                {
-                    log.LogWarning($"Function Execution Time (success): {watch.ElapsedMilliseconds} ms {watch.Elapsed.Seconds} sec ------------------------------------------------------");
-                    log.LogWarning("Device processing ended ------------------------------------------------------");
-                    log.LogWarning($" ");
-                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[Device Processing] SQL Exception for IMEI: {Imei}", deviceProcessing.IMEI);
+                await transaction.RollbackAsync(ct);
+                throw;
+            }
+            finally
+            {
+                watch.Stop();
+                _logger.LogWarning(
+                    "Device Processing ended — Execution Time: {ElapsedMs}ms {ElapsedSec}s",
+                    watch.ElapsedMilliseconds, watch.Elapsed.Seconds);
             }
         }
     }
 }
+

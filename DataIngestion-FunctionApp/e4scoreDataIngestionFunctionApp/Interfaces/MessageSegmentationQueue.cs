@@ -19,7 +19,7 @@ namespace e4scoreDataIngestionFunctionApp.Interfaces
         {
 
             ServiceBusClient serviceBusClient = new ServiceBusClient(Environment.GetEnvironmentVariable(ApplicationSettings.MaTrackQueueConnection));
-            var sender = serviceBusClient.CreateSender("messagesegmentation");
+            var sender = serviceBusClient.CreateSender(ApplicationSettings.MessageSegmentationQueueName);
 
             try
             {
@@ -33,7 +33,7 @@ namespace e4scoreDataIngestionFunctionApp.Interfaces
             catch (Exception ex)
             {
                 log.LogError($"Exception on sending message segmentation Queue: {matrackRequest.imei} Exception {ex.Message} --------------------------------");
-                throw ex;
+                throw;
             }
             finally
             {

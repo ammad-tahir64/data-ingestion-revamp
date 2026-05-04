@@ -1,0 +1,12 @@
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Contracts/bin/Debug/net8.0/E4Score.Platform.Contracts.deps.json
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Contracts/bin/Debug/net8.0/E4Score.Platform.Contracts.dll
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Contracts/bin/Debug/net8.0/E4Score.Platform.Contracts.pdb
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Contracts/obj/Debug/net8.0/E4Score.Platform.Contracts.GeneratedMSBuildEditorConfig.editorconfig
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Contracts/obj/Debug/net8.0/E4Score.Platform.Contracts.AssemblyInfoInputs.cache
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Contracts/obj/Debug/net8.0/E4Score.Platform.Contracts.AssemblyInfo.cs
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Contracts/obj/Debug/net8.0/E4Score.Platform.Contracts.csproj.CoreCompileInputs.cache
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Contracts/obj/Debug/net8.0/E4Score.Platform.Contracts.sourcelink.json
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Contracts/obj/Debug/net8.0/E4Score.Platform.Contracts.dll
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Contracts/obj/Debug/net8.0/refint/E4Score.Platform.Contracts.dll
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Contracts/obj/Debug/net8.0/E4Score.Platform.Contracts.pdb
+/home/runner/work/data-ingestion-revamp/data-ingestion-revamp/E4Score.Platform/src/E4Score.Platform.Contracts/obj/Debug/net8.0/ref/E4Score.Platform.Contracts.dll

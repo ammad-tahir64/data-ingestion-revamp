@@ -114,7 +114,7 @@ namespace e4scoreDataIngestionFunctionApp.Helpers
                 var shapeData = string.Empty;
                 bool isInside = false;
 
-                var locations = _azureRedisCache.GetAllLocationsByComapnyIdCache(companyId.ToString()).Select(locationCache => JsonConvert.DeserializeObject<RedisLocation>(locationCache.Value)).Where(x=>x.GeofenceType.IsNullOrEmpty() == false).ToList();
+                var locations = _azureRedisCache.GetAllLocationsByCompanyIdCache(companyId.ToString()).Select(locationCache => JsonConvert.DeserializeObject<RedisLocation>(locationCache.Value)).Where(x=>x.GeofenceType.IsNullOrEmpty() == false).ToList();
 
                 foreach (var location in locations)
                 {

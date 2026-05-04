@@ -1,41 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <AzureFunctionsVersion>v4</AzureFunctionsVersion>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <None Remove="DataAccess\MySql\Scripts\getEventDeviceByIMEI.sql" />
-    <None Remove="DataAccess\MySql\Scripts\savePingEventData.sql" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="DataAccess\MySql\Scripts\getEventDeviceByIMEI.sql" />
-    <EmbeddedResource Include="DataAccess\MySql\Scripts\savePingEventData.sql" />
-  </ItemGroup>
-  <ItemGroup>
-	  <PackageReference Include="Azure.Data.Tables" Version="12.7.1" />
-	  <PackageReference Include="Azure.Messaging.ServiceBus" Version="7.12.0" />
-	  <PackageReference Include="Geolocation" Version="1.2.1" />
-	  <PackageReference Include="GoogleMapsApi" Version="1.2.1" />
-	  <PackageReference Include="Microsoft.Azure.Functions.Extensions" Version="1.1.0" />
-	  <PackageReference Include="Microsoft.Azure.WebJobs.Extensions.ServiceBus" Version="4.3.0" />
-	  <PackageReference Include="Microsoft.EntityFrameworkCore" Version="6.0.0" />
-	  <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="6.0.0">
-	    <PrivateAssets>all</PrivateAssets>
-	    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-	  </PackageReference>
-	  <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="6.0.0">
-	    <PrivateAssets>all</PrivateAssets>
-	    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-	  </PackageReference>
-	  <PackageReference Include="Microsoft.Extensions.Configuration.AzureKeyVault" Version="3.1.24" />
-	  <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="7.0.0" />
-	  <PackageReference Include="Microsoft.NET.Sdk.Functions" Version="4.1.1" />
-	  <PackageReference Include="MySql.Data" Version="8.0.31" />
-	  <PackageReference Include="MySqlConnector" Version="2.2.5" />
-	  <PackageReference Include="NetTopologySuite" Version="2.5.0" />
-	  <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="6.0.0" />
-	  <PackageReference Include="RestSharp" Version="108.0.3" />
-	  <PackageReference Include="StackExchange.Redis" Version="2.6.86" />
+    <PackageReference Include="Azure.Data.Tables" Version="12.7.1" />
+    <PackageReference Include="Azure.Messaging.ServiceBus" Version="7.18.1" />
+    <PackageReference Include="Dapper" Version="2.1.35" />
+    <PackageReference Include="Geolocation" Version="1.2.1" />
+    <PackageReference Include="GoogleMapsApi" Version="1.2.1" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.22.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="1.4.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.ServiceBus" Version="5.22.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.17.4" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.AzureKeyVault" Version="3.1.24" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+    <PackageReference Include="NetTopologySuite" Version="2.5.0" />
+    <PackageReference Include="RestSharp" Version="112.1.0" />
+    <PackageReference Include="StackExchange.Redis" Version="2.6.86" />
   </ItemGroup>
   <ItemGroup>
     <None Update="host.json">

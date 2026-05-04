@@ -5,18 +5,15 @@
       "samplingSettings": {
         "isEnabled": true,
         "excludedTypes": "Request"
-      }
+      },
+      "enableLiveMetricsFilters": true
     }
   },
   "extensions": {
     "serviceBus": {
       "prefetchCount": 1,
-      "messageHandlerOptions": {
-        "maxConcurrentCalls": 1
-      }
-    },
-    "batchOptions": {
-      "maxMessageCount": 1
+      "maxConcurrentCalls": 1,
+      "autoCompleteMessages": true
     }
   }
 }
